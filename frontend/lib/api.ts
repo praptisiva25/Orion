@@ -156,10 +156,10 @@ export const bankingApi = {
     apiRequest<{ ticket: AdminSupportTicket; messages: AdminTicketMessage[] }>(`/api/admin/support-tickets/${id}`),
   assignAdminSupportTicket: (id: number, officerId: number | null) =>
     apiRequest<{ message: string; ticketId: number; assignedOfficerId: number | null; assignedOfficerName: string | null }>(`/api/admin/support-tickets/${id}/assignment`, { method: "PUT", body: JSON.stringify({ officerId }) }),
-  getAdminAuditLogs: (filters: { search?: string; action?: string; entityType?: string; fromDate?: string; toDate?: string; page?: number; pageSize?: number } = {}) => {
+  getAdminAuditLogs: (filters: { search?: string; action?: string; entityType?: string; category?: string; actorId?: number; entityId?: number; fromDate?: string; toDate?: string; page?: number; pageSize?: number } = {}) => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== "") params.set(key, String(value)); });
-    return apiRequest<AdminAuditLog[]>(`/api/admin/audit-logs${params.size ? `?${params}` : ""}`);
+    return apiRequest<{ items: AdminAuditLog[]; totalCount: number }>(`/api/admin/audit-logs${params.size ? `?${params}` : ""}`);
   },
 
   getProfile: () =>
@@ -242,6 +242,10 @@ export const bankingApi = {
 
     getOfficerTickets: () =>
         apiRequest<SupportTicket[]>("/api/officer/tickets"),
+    getOfficerTicketHistory: (filters: { status?: string; priority?: string; fromDate?: string; toDate?: string } = {}) => {
+        const params = new URLSearchParams(); Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
+        return apiRequest<SupportTicket[]>(`/api/officer/tickets/history${params.size ? `?${params}` : ""}`);
+    },
 
     getOfficerTicket: (id: number) =>
         apiRequest<SupportTicket>(`/api/officer/tickets/${id}`),
@@ -260,6 +264,10 @@ export const bankingApi = {
         
     getAllKycDocuments: () =>
         apiRequest<KycDocument[]>("/api/kyc/all"),
+    getOfficerKycHistory: (filters: { status?: string; documentType?: string; customer?: string; fromDate?: string; toDate?: string } = {}) => {
+        const params = new URLSearchParams(); Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
+        return apiRequest<KycDocument[]>(`/api/kyc/review-history${params.size ? `?${params}` : ""}`);
+    },
     
     getKycDocumentFile: (id: number, download = false) =>
         apiFileRequest(`/api/kyc/${id}/file${download ? "?download=true" : ""}`),
@@ -275,6 +283,10 @@ export const bankingApi = {
 
     getOfficerApplications: () =>
         apiRequest<Application[]>("/api/applications/review-queue"),
+    getOfficerApplicationHistory: (filters: { status?: string; customer?: string; product?: string; fromDate?: string; toDate?: string } = {}) => {
+        const params = new URLSearchParams(); Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
+        return apiRequest<Application[]>(`/api/applications/review-history${params.size ? `?${params}` : ""}`);
+    },
 
     getOfficerApplication: (id: number) =>
         apiRequest<Application>(`/api/applications/review/${id}`),

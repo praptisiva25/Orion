@@ -93,6 +93,7 @@ public class AdminCustomersController : ControllerBase
         if (customer.IsActive == isActive)
             return BadRequest(new { message = "Customer already has this status." });
 
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         customer.IsActive = isActive;
         var result = await _userManager.UpdateAsync(customer);
         if (!result.Succeeded)
@@ -101,6 +102,7 @@ public class AdminCustomersController : ControllerBase
         var adminId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         await _auditLog.LogAsync(adminId, isActive ? "Customer Activated" : "Customer Deactivated", "ApplicationUser", id,
             $"Admin changed customer account status to {(isActive ? "Active" : "Inactive")}.");
+        await transaction.CommitAsync();
         return Ok(new { message = $"Customer {(isActive ? "activated" : "deactivated")} successfully.", id, isActive });
     }
 }

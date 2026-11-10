@@ -8,8 +8,11 @@ import type { KycDocument, SupportTicket } from "@/types/banking";
 
 export default function OfficerDashboard() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [ticketHistory, setTicketHistory] = useState<SupportTicket[]>([]);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
+  const [kycHistory, setKycHistory] = useState<KycDocument[]>([]);
   const [applications, setApplications] = useState<Awaited<ReturnType<typeof bankingApi.getOfficerApplications>>>([]);
+  const [applicationHistory, setApplicationHistory] = useState<Awaited<ReturnType<typeof bankingApi.getOfficerApplicationHistory>>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -17,8 +20,11 @@ export default function OfficerDashboard() {
     async function loadDashboard() {
       const results = await Promise.allSettled([
         bankingApi.getOfficerTickets(),
+        bankingApi.getOfficerTicketHistory(),
         bankingApi.getAllKycDocuments(),
+        bankingApi.getOfficerKycHistory(),
         bankingApi.getOfficerApplications(),
+        bankingApi.getOfficerApplicationHistory(),
       ]);
 
       if (results[0].status === "fulfilled") {
@@ -26,11 +32,18 @@ export default function OfficerDashboard() {
       }
 
       if (results[1].status === "fulfilled") {
-        setDocuments(results[1].value);
+        setTicketHistory(results[1].value);
       }
 
       if (results[2].status === "fulfilled") {
-        setApplications(results[2].value);
+        setDocuments(results[2].value.filter((item) => item.status === "Pending"));
+      }
+      if (results[3].status === "fulfilled") setKycHistory(results[3].value);
+      if (results[4].status === "fulfilled") {
+        setApplications(results[4].value);
+      }
+      if (results[5].status === "fulfilled") {
+        setApplicationHistory(results[5].value);
       }
 
       if (results.some((result) => result.status === "rejected")) {
@@ -43,16 +56,6 @@ export default function OfficerDashboard() {
     loadDashboard();
   }, []);
 
-  const openTickets = tickets.filter((ticket) =>
-    ["open", "inprogress", "in progress"].includes(
-      ticket.status.toLowerCase()
-    )
-  ).length;
-
-  const pendingKyc = documents.filter(
-    (document) => document.status.toLowerCase() === "pending"
-  ).length;
-
   const recentTickets = [...tickets]
     .sort(
       (a, b) =>
@@ -63,26 +66,32 @@ export default function OfficerDashboard() {
 
   const cards = [
     {
-      label: "Assigned tickets",
+      label: "Active assigned tickets",
       value: tickets.length,
       detail: "Tickets assigned to you",
       href: "/officer/tickets",
     },
     {
-      label: "Open tickets",
-      value: openTickets,
-      detail: "Require attention",
+      label: "Resolved / closed tickets",
+      value: ticketHistory.length,
+      detail: "In ticket history",
       href: "/officer/tickets",
     },
     {
-      label: "KYC documents",
-      value: documents.length,
-      detail: "Documents submitted",
+      label: "Reviewed applications",
+      value: applicationHistory.length,
+      detail: "Approved or rejected",
+      href: "/officer/applications",
+    },
+    {
+      label: "Reviewed KYC",
+      value: kycHistory.length,
+      detail: "Verified or rejected",
       href: "/officer/kyc",
     },
     {
       label: "Pending KYC",
-      value: pendingKyc,
+      value: documents.length,
       detail: "Awaiting review",
       href: "/officer/kyc",
     },
@@ -123,7 +132,7 @@ export default function OfficerDashboard() {
           Work overview
         </h2>
 
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {cards.map((card) => (
             <Link
               key={card.label}
@@ -204,6 +213,9 @@ export default function OfficerDashboard() {
             >
               Review applications →
             </Link>
+            <Link href="/officer/applications" className="block rounded-lg border border-slate-100 px-4 py-4 text-sm font-medium text-[#172C46] hover:bg-[#F8FAF8]">Application history →</Link>
+            <Link href="/officer/kyc" className="block rounded-lg border border-slate-100 px-4 py-4 text-sm font-medium text-[#172C46] hover:bg-[#F8FAF8]">KYC history →</Link>
+            <Link href="/officer/tickets" className="block rounded-lg border border-slate-100 px-4 py-4 text-sm font-medium text-[#172C46] hover:bg-[#F8FAF8]">Ticket history →</Link>
           </div>
         </div>
       </section>

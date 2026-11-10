@@ -1,5 +1,6 @@
 
 using BankingAPI.DTOs.Admin;
+using BankingAPI.Data;
 using BankingAPI.Models;
 using BankingAPI.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -16,13 +17,16 @@ public class OfficerController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly AuditLogService _auditLog;
+    private readonly ApplicationDbContext _db;
 
     public OfficerController(
         UserManager<ApplicationUser> userManager,
-        AuditLogService auditLog)
+        AuditLogService auditLog,
+        ApplicationDbContext db)
     {
         _userManager = userManager;
         _auditLog = auditLog;
+        _db = db;
     }
 
     [HttpPost]
@@ -45,6 +49,7 @@ public class OfficerController : ControllerBase
             IsActive = true
         };
 
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         var result = await _userManager.CreateAsync(
             officer,
             request.Password
@@ -62,7 +67,7 @@ public class OfficerController : ControllerBase
 
         if (!roleResult.Succeeded)
         {
-            await _userManager.DeleteAsync(officer);
+            await transaction.RollbackAsync();
 
             return BadRequest(
                 roleResult.Errors.Select(e => e.Description)
@@ -76,6 +81,7 @@ public class OfficerController : ControllerBase
             officer.Id,
             $"Admin created officer account for {officer.Email}."
         );
+        await transaction.CommitAsync();
 
         return Ok(new
         {
@@ -120,6 +126,7 @@ public class OfficerController : ControllerBase
             return BadRequest("Officer already has this status.");
         }
         
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         officer.IsActive = isActive;
 
         var result = await _userManager.UpdateAsync(officer);
@@ -139,6 +146,7 @@ public class OfficerController : ControllerBase
             officer.Id,
             $"Admin changed officer status to {(isActive ? "Active" : "Inactive")}."
         );
+        await transaction.CommitAsync();
         
         return Ok(new
         {

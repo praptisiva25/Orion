@@ -5,6 +5,9 @@ public class AuditLogResponseDto
     public int Id { get; set; }
     public int? UserId { get; set; }
     public string? ActorName { get; set; }
+    public string? ActorEmail { get; set; }
+    public string? ActorRoles { get; set; }
+    public string Category { get; set; } = "Other";
     public string Action { get; set; } = string.Empty;
     public string EntityType { get; set; } = string.Empty;
     public int? EntityId { get; set; }

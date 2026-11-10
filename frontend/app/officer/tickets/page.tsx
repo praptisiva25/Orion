@@ -19,17 +19,31 @@ export default function OfficerTicketsPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [filter, setFilter] = useState("All");
+  const [view, setView] = useState<"active" | "history">("active");
+  const [priority, setPriority] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   async function loadTickets() {
-    const data = await bankingApi.getOfficerTickets();
+    const data = view === "active" ? await bankingApi.getOfficerTickets() : await bankingApi.getOfficerTicketHistory({ status: filter, priority, fromDate, toDate });
     setTickets(data);
   }
 
   useEffect(() => {
-    loadTickets()
-      .catch((err) => setError(err.message || "Unable to load tickets."))
-      .finally(() => setLoading(false));
-  }, []);
+    let active = true;
+    async function load() {
+      try {
+        const data = view === "active" ? await bankingApi.getOfficerTickets() : await bankingApi.getOfficerTicketHistory({ status: filter, priority, fromDate, toDate });
+        if (active) setTickets(data);
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Unable to load tickets.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void load();
+    return () => { active = false; };
+  }, [view, filter, priority, fromDate, toDate]);
 
   async function loadConversation(ticketId: number) {
     setConversationLoading(true);
@@ -103,7 +117,7 @@ export default function OfficerTicketsPage() {
   }
 
   const filteredTickets =
-    filter === "All"
+    view === "history" || filter === "All"
       ? tickets
       : tickets.filter(
           (ticket) => ticket.status.toLowerCase() === filter.toLowerCase()
@@ -114,7 +128,7 @@ export default function OfficerTicketsPage() {
 
   return (
     <OfficerShell
-      title="Assigned Tickets"
+      title={view === "active" ? "Active Tickets" : "Ticket History"}
       subtitle="Review customer requests, manage status and respond to messages."
     >
       {error && (
@@ -132,13 +146,13 @@ export default function OfficerTicketsPage() {
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div>
-            <h2 className="font-semibold text-[#172C46]">Ticket queue</h2>
+            <h2 className="font-semibold text-[#172C46]">{view === "active" ? "Active ticket queue" : "Resolved and closed tickets"}</h2>
             <p className="mt-1 text-sm text-slate-500">
               {tickets.length} assigned ticket(s)
             </p>
           </div>
 
-          <select
+          <div className="flex flex-wrap gap-2"><button onClick={() => { setView("active"); setFilter("All"); setLoading(true); }} className={`rounded-lg px-4 py-2 text-sm ${view === "active" ? "bg-[#172C46] text-white" : "border border-slate-200"}`}>Active</button><button onClick={() => { setView("history"); setFilter("All"); setLoading(true); }} className={`rounded-lg px-4 py-2 text-sm ${view === "history" ? "bg-[#172C46] text-white" : "border border-slate-200"}`}>History</button>{view === "history" && <><select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"><option value="All">All history</option><option>Resolved</option><option>Closed</option></select><select value={priority} onChange={(e) => setPriority(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"><option value="">All priorities</option>{["Low", "Normal", "High", "Urgent"].map((p) => <option key={p}>{p}</option>)}</select><input aria-label="Created from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"/><input aria-label="Created to" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"/></>}</div>{view === "active" && <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 outline-none"
@@ -146,9 +160,7 @@ export default function OfficerTicketsPage() {
             <option value="All">All statuses</option>
             <option value="Open">Open</option>
             <option value="InProgress">In progress</option>
-            <option value="Resolved">Resolved</option>
-            <option value="Closed">Closed</option>
-          </select>
+          </select>}
         </div>
 
         {loading ? (

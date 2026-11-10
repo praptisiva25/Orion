@@ -16,20 +16,25 @@ export default function OfficerKycPage() {
   const [rejectTarget, setRejectTarget] = useState<KycDocument | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [preview, setPreview] = useState<{ document: KycDocument; url: string } | null>(null);
+  const [view, setView] = useState<"active" | "history">("active");
+  const [customer, setCustomer] = useState("");
+  const [documentType, setDocumentType] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   async function loadDocuments() {
-    const data = await bankingApi.getAllKycDocuments();
+    const data = view === "active" ? (await bankingApi.getAllKycDocuments()).filter((item) => item.status === "Pending") : await bankingApi.getOfficerKycHistory({ status: filter === "All" ? "All" : filter, customer, documentType, fromDate, toDate });
     setDocuments(data);
   }
 
   useEffect(() => {
     let active = true;
-    bankingApi.getAllKycDocuments()
+    (view === "active" ? bankingApi.getAllKycDocuments().then((items) => items.filter((item) => item.status === "Pending")) : bankingApi.getOfficerKycHistory({ status: filter === "All" ? "All" : filter, customer, documentType, fromDate, toDate }))
       .then((data) => { if (active) setDocuments(data); })
       .catch((err) => { if (active) setError(err.message || "Unable to load documents."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [view, filter, customer, documentType, fromDate, toDate]);
 
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview.url);
@@ -77,9 +82,7 @@ export default function OfficerKycPage() {
     }
   }
 
-  const filteredDocuments = filter === "All"
-    ? documents
-    : documents.filter((document) => document.status.toLowerCase() === filter.toLowerCase());
+  const filteredDocuments = documents;
 
   return (
     <OfficerShell title="KYC Reviews" subtitle="Review customer-submitted identity documents.">
@@ -89,16 +92,12 @@ export default function OfficerKycPage() {
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div>
-            <h2 className="font-semibold text-[#172C46]">Submitted KYC documents</h2>
-            <p className="mt-1 text-sm text-slate-500">{documents.length} document(s) in the review queue</p>
+            <h2 className="font-semibold text-[#172C46]">{view === "active" ? "Pending KYC documents" : "KYC history"}</h2>
+            <p className="mt-1 text-sm text-slate-500">{documents.length} {view === "active" ? "document(s) awaiting review" : "reviewed document(s)"}</p>
           </div>
-          <select value={filter} onChange={(event) => setFilter(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 outline-none">
-            <option value="Pending">Pending review</option>
-            <option value="Verified">Verified</option>
-            <option value="Rejected">Rejected</option>
-            <option value="All">All documents</option>
-          </select>
+          <div className="flex gap-2"><button onClick={() => { setView("active"); setLoading(true); }} className={`rounded-lg px-4 py-2 text-sm ${view === "active" ? "bg-[#172C46] text-white" : "border border-slate-200"}`}>Active</button><button onClick={() => { setView("history"); setFilter("All"); setLoading(true); }} className={`rounded-lg px-4 py-2 text-sm ${view === "history" ? "bg-[#172C46] text-white" : "border border-slate-200"}`}>History</button></div>
         </div>
+        {view === "history" && <div className="grid gap-3 border-b border-slate-100 p-5 sm:grid-cols-2 xl:grid-cols-5"><select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"><option value="All">All reviewed</option><option>Verified</option><option>Rejected</option></select><select value={documentType} onChange={(e) => setDocumentType(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"><option value="">All document types</option><option>PAN</option><option>Aadhaar</option></select><input placeholder="Customer name or email" value={customer} onChange={(e) => setCustomer(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"/><input aria-label="Uploaded from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"/><input aria-label="Uploaded to" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"/></div>}
 
         {loading ? <p className="p-8 text-sm text-slate-500">Loading documents...</p> : filteredDocuments.length === 0 ? (
           <p className="p-10 text-center text-sm text-slate-500">No documents found for this filter.</p>
@@ -106,7 +105,7 @@ export default function OfficerKycPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="bg-[#F8F9F7] text-xs uppercase tracking-wide text-slate-500">
-                <tr><th className="px-5 py-4">Customer</th><th className="px-5 py-4">Document</th><th className="px-5 py-4">Uploaded</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Review</th></tr>
+                <tr><th className="px-5 py-4">Customer</th><th className="px-5 py-4">Document</th><th className="px-5 py-4">Uploaded / reviewed</th><th className="px-5 py-4">Status / reason</th><th className="px-5 py-4">Reviewer / action</th></tr>
               </thead>
               <tbody>
                 {filteredDocuments.map((document) => {
@@ -126,13 +125,13 @@ export default function OfficerKycPage() {
                           <button onClick={() => downloadDocument(document)} className="text-xs font-medium text-[#456B58] hover:underline">Download</button>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-5 py-5 text-slate-500">{new Date(document.uploadedAt).toLocaleString("en-IN")}</td>
+                      <td className="whitespace-nowrap px-5 py-5 text-slate-500">{new Date(document.uploadedAt).toLocaleString("en-IN")}{document.reviewedAt && <p className="mt-1">Reviewed {new Date(document.reviewedAt).toLocaleString("en-IN")}</p>}</td>
                       <td className="px-5 py-5">
                         <span className={`rounded-full px-3 py-1 text-xs font-medium ${document.status === "Verified" ? "bg-green-50 text-green-700" : document.status === "Rejected" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{document.status}</span>
                         {document.reviewReason && <p className="mt-2 max-w-48 text-xs text-red-700">{document.reviewReason}</p>}
                       </td>
                       <td className="px-5 py-5">
-                        {pending ? <div className="flex gap-2">
+                        {document.reviewerName && <p className="mb-2 text-xs text-slate-500">{document.reviewerName}</p>}{pending ? <div className="flex gap-2">
                           <button disabled={reviewingId === document.id} onClick={() => reviewDocument(document, "Verified")} className="rounded-md bg-[#EAF0EC] px-3 py-2 text-xs font-medium text-[#345B4A] hover:bg-[#DCE8E0] disabled:opacity-50">Approve</button>
                           <button disabled={reviewingId === document.id} onClick={() => { setRejectTarget(document); setRejectionReason(""); }} className="rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50">Reject</button>
                         </div> : <span className="text-xs text-slate-400">Reviewed {document.reviewedAt ? new Date(document.reviewedAt).toLocaleDateString("en-IN") : ""}</span>}

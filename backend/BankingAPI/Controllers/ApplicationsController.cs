@@ -162,6 +162,38 @@ public class ApplicationsController : ControllerBase
         return Ok(applications);
     }
 
+    [HttpGet("review-history")]
+    [Authorize(Roles = "Admin,Officer")]
+    public async Task<ActionResult<List<ApplicationResponseDto>>> GetReviewHistory(
+        [FromQuery] string? status, [FromQuery] string? customer,
+        [FromQuery] string? product, [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate)
+    {
+        var query = from application in _db.ProductApplications.AsNoTracking()
+                    join customerUser in _db.Users.AsNoTracking() on application.UserId equals customerUser.Id
+                    join bankingProduct in _db.BankingProducts.AsNoTracking() on application.BankingProductId equals bankingProduct.Id
+                    where application.Status == "Approved" || application.Status == "Rejected"
+                    select new { application, customerUser, bankingProduct };
+        if (!string.IsNullOrWhiteSpace(status) && status != "All")
+        {
+            if (status is not ("Approved" or "Rejected")) return BadRequest("Invalid review status.");
+            query = query.Where(x => x.application.Status == status);
+        }
+        if (!string.IsNullOrWhiteSpace(customer)) query = query.Where(x => x.customerUser.FullName.Contains(customer) || x.customerUser.Email!.Contains(customer));
+        if (!string.IsNullOrWhiteSpace(product)) query = query.Where(x => x.bankingProduct.Name.Contains(product));
+        if (fromDate.HasValue) query = query.Where(x => x.application.AppliedAt >= fromDate.Value);
+        if (toDate.HasValue) query = query.Where(x => x.application.AppliedAt < toDate.Value.Date.AddDays(1));
+        var results = await query.OrderByDescending(x => x.application.ReviewedAt).Select(x => new ApplicationResponseDto
+        {
+            Id = x.application.Id, UserId = x.application.UserId, CustomerName = x.customerUser.FullName,
+            CustomerEmail = x.customerUser.Email, BankingProductId = x.bankingProduct.Id, Product = x.bankingProduct.Name,
+            RequestedAmount = x.application.RequestedAmount, Status = x.application.Status, Remarks = x.application.Remarks,
+            AppliedAt = x.application.AppliedAt, ReviewedAt = x.application.ReviewedAt, ReviewReason = x.application.ReviewReason,
+            ReviewerName = _db.Users.Where(u => u.Id == x.application.ReviewedBy).Select(u => u.FullName).FirstOrDefault()
+        }).ToListAsync();
+        return Ok(results);
+    }
+
     [HttpGet("review/{id:int}")]
     [Authorize(Roles = "Admin,Officer")]
     public async Task<ActionResult<ApplicationResponseDto>> GetReviewDetails(int id)

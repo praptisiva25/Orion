@@ -73,6 +73,7 @@ public class CustomerController : ControllerBase
         var profile = await _db.CustomerProfiles
             .FirstOrDefaultAsync(p => p.UserId == userId);
 
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         if (profile == null)
         {
             profile = new CustomerProfile { UserId = userId };
@@ -96,6 +97,7 @@ public class CustomerController : ControllerBase
             profile.Id,
             "Customer updated their profile."
         );
+        await transaction.CommitAsync();
 
         var user = await _userManager.FindByIdAsync(userId.ToString());
 

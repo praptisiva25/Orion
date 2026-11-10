@@ -134,6 +134,9 @@ export interface AdminAuditLog {
   id: number;
   userId: number | null;
   actorName: string | null;
+  actorEmail: string | null;
+  actorRoles: string | null;
+  category: string;
   action: string;
   entityType: string;
   entityId: number | null;

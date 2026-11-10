@@ -43,7 +43,7 @@ public class OfficerTicketsController : ControllerBase
 
         var tickets = await _db.SupportTickets
             .AsNoTracking()
-            .Where(t => t.AssignedOfficerId == officerId)
+            .Where(t => t.AssignedOfficerId == officerId && t.Status != "Resolved" && t.Status != "Closed")
             .OrderByDescending(t => t.UpdatedAt)
             .Select(t => new SupportTicketResponseDto
             {
@@ -60,6 +60,25 @@ public class OfficerTicketsController : ControllerBase
             .ToListAsync();
 
         return Ok(tickets);
+    }
+
+    [HttpGet("history")]
+    public async Task<IActionResult> GetTicketHistory([FromQuery] string? status, [FromQuery] string? priority,
+        [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate)
+    {
+        var officerId = GetOfficerId();
+        var query = _db.SupportTickets.AsNoTracking().Where(t => t.AssignedOfficerId == officerId && (t.Status == "Resolved" || t.Status == "Closed"));
+        if (!string.IsNullOrWhiteSpace(status) && status != "All")
+        {
+            if (status is not ("Resolved" or "Closed")) return BadRequest("Invalid history status.");
+            query = query.Where(t => t.Status == status);
+        }
+        if (!string.IsNullOrWhiteSpace(priority)) query = query.Where(t => t.Priority == priority);
+        if (fromDate.HasValue) query = query.Where(t => t.CreatedAt >= fromDate.Value);
+        if (toDate.HasValue) query = query.Where(t => t.CreatedAt < toDate.Value.Date.AddDays(1));
+        return Ok(await query.OrderByDescending(t => t.UpdatedAt).Select(t => new SupportTicketResponseDto
+        { Id = t.Id, UserId = t.UserId, AssignedOfficerId = t.AssignedOfficerId, Subject = t.Subject, Description = t.Description,
+          Status = t.Status, Priority = t.Priority, CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt }).ToListAsync());
     }
 
     // Get one assigned ticket
@@ -130,6 +149,7 @@ public class OfficerTicketsController : ControllerBase
 
         var oldStatus = ticket.Status;
 
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         ticket.Status = request.Status;
         ticket.UpdatedAt = DateTime.UtcNow;
 
@@ -148,6 +168,7 @@ public class OfficerTicketsController : ControllerBase
             ticket.Id,
             $"Officer changed ticket status from {oldStatus} to {ticket.Status}."
         );
+        await transaction.CommitAsync();
 
         return Ok(new
         {
@@ -225,6 +246,7 @@ public class OfficerTicketsController : ControllerBase
             SentAt = DateTime.UtcNow
         };
 
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         _db.TicketMessages.Add(message);
 
         ticket.UpdatedAt = DateTime.UtcNow;
@@ -244,6 +266,7 @@ public class OfficerTicketsController : ControllerBase
             ticket.Id,
             "Officer sent a reply to the customer."
         );
+        await transaction.CommitAsync();
 
         return Ok(new
         {

@@ -131,6 +131,7 @@ public class AdminSupportTicketsController : ControllerBase
         if (previousOfficerId == request.OfficerId)
             return BadRequest(new { message = "Ticket is already assigned to that Officer." });
 
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         ticket.AssignedOfficerId = request.OfficerId;
         ticket.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
@@ -139,6 +140,7 @@ public class AdminSupportTicketsController : ControllerBase
         await _auditLog.LogAsync(adminId, request.OfficerId.HasValue ? "Support Ticket Assigned" : "Support Ticket Unassigned",
             "SupportTicket", id,
             $"Admin changed ticket assignment from Officer #{previousOfficerId?.ToString() ?? "none"} to {newOfficerName ?? "unassigned"}.");
+        await transaction.CommitAsync();
         return Ok(new { message = "Ticket assignment updated.", ticketId = id, assignedOfficerId = request.OfficerId, assignedOfficerName = newOfficerName });
     }
 }

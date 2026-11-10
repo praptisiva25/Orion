@@ -205,6 +205,35 @@ public class KycController : ControllerBase
         return Ok(documents);
     }
 
+    [HttpGet("review-history")]
+    [Authorize(Roles = "Admin,Officer")]
+    public async Task<IActionResult> GetReviewHistory([FromQuery] string? status, [FromQuery] string? documentType,
+        [FromQuery] string? customer, [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate)
+    {
+        var query = from document in _db.KycDocuments.AsNoTracking()
+                    join customerUser in _db.Users.AsNoTracking() on document.UserId equals customerUser.Id
+                    where document.Status == "Verified" || document.Status == "Rejected"
+                    select new { document, customerUser };
+        if (!string.IsNullOrWhiteSpace(status) && status != "All")
+        {
+            if (status is not ("Verified" or "Rejected")) return BadRequest("Invalid review status.");
+            query = query.Where(x => x.document.Status == status);
+        }
+        if (!string.IsNullOrWhiteSpace(documentType)) query = query.Where(x => x.document.DocumentType == documentType);
+        if (!string.IsNullOrWhiteSpace(customer)) query = query.Where(x => x.customerUser.FullName.Contains(customer) || x.customerUser.Email!.Contains(customer));
+        if (fromDate.HasValue) query = query.Where(x => x.document.UploadedAt >= fromDate.Value);
+        if (toDate.HasValue) query = query.Where(x => x.document.UploadedAt < toDate.Value.Date.AddDays(1));
+        var results = await query.OrderByDescending(x => x.document.ReviewedAt).Select(x => new KycDocumentResponseDto
+        {
+            Id = x.document.Id, UserId = x.document.UserId, CustomerName = x.customerUser.FullName,
+            CustomerEmail = x.customerUser.Email, DocumentType = x.document.DocumentType, FileName = x.document.FileName,
+            Status = x.document.Status, UploadedAt = x.document.UploadedAt, ReviewedAt = x.document.ReviewedAt,
+            ReviewReason = x.document.ReviewReason,
+            ReviewerName = _db.Users.Where(u => u.Id == x.document.ReviewedBy).Select(u => u.FullName).FirstOrDefault()
+        }).ToListAsync();
+        return Ok(results);
+    }
+
     // Reviewer file access is authenticated and never returns the stored path.
     [HttpGet("{id:int}/file")]
     [Authorize(Roles = "Admin,Officer")]

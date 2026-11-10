@@ -97,6 +97,8 @@ public class ProductsController : ControllerBase
     public async Task<ActionResult<ProductResponseDto>> CreateProduct(
         CreateProductRequestDto request)
     {
+        if (!await IsSupportedCategory(request.Category))
+            return BadRequest(new { message = "Choose a supported product category or an existing category." });
         var product = new BankingProduct
         {
             Name = request.Name,
@@ -106,6 +108,7 @@ public class ProductsController : ControllerBase
             MinimumAmount = request.MinimumAmount
         };
 
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         _db.BankingProducts.Add(product);
         await _db.SaveChangesAsync();
 
@@ -120,6 +123,7 @@ public class ProductsController : ControllerBase
             product.Id,
             $"Admin created the {product.Name} product."
         );
+        await transaction.CommitAsync();
 
         var response = new ProductResponseDto
         {
@@ -143,8 +147,11 @@ public class ProductsController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateProduct(int id, CreateProductRequestDto request)
     {
+        if (!await IsSupportedCategory(request.Category))
+            return BadRequest(new { message = "Choose a supported product category or an existing category." });
         var product = await _db.BankingProducts.FirstOrDefaultAsync(p => p.Id == id);
         if (product == null) return NotFound(new { message = "Product not found." });
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         product.Name = request.Name.Trim();
         product.Category = request.Category.Trim();
         product.Description = request.Description.Trim();
@@ -154,6 +161,7 @@ public class ProductsController : ControllerBase
         var adminId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         await _auditLog.LogAsync(adminId, "Banking Product Updated", "BankingProduct", id,
             $"Admin updated the {product.Name} product.");
+        await transaction.CommitAsync();
         return Ok(new { message = "Product updated.", product = ToResponse(product) });
     }
 
@@ -165,11 +173,13 @@ public class ProductsController : ControllerBase
         if (product == null) return NotFound(new { message = "Product not found." });
         if (product.IsActive == isActive)
             return BadRequest(new { message = "Product already has this status." });
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         product.IsActive = isActive;
         await _db.SaveChangesAsync();
         var adminId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         await _auditLog.LogAsync(adminId, isActive ? "Banking Product Activated" : "Banking Product Deactivated",
             "BankingProduct", id, $"Admin changed product status to {(isActive ? "Active" : "Inactive")}.");
+        await transaction.CommitAsync();
         return Ok(new { message = "Product status updated.", product = ToResponse(product) });
     }
 
@@ -184,4 +194,8 @@ public class ProductsController : ControllerBase
         IsActive = product.IsActive,
         CreatedAt = product.CreatedAt
     };
+
+    private async Task<bool> IsSupportedCategory(string category) =>
+        new[] { "Loan", "Account", "Deposit" }.Contains(category.Trim(), StringComparer.OrdinalIgnoreCase) ||
+        await _db.BankingProducts.AnyAsync(p => p.Category == category.Trim());
 }
