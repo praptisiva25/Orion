@@ -60,6 +60,20 @@ export default function CustomerShell({
     initialize();
   }, [router]);
 
+  useEffect(() => {
+    async function refreshUnreadCount() {
+      try {
+        const unreadData = await bankingApi.getUnreadCount();
+        setUnread(unreadData.unreadCount);
+      } catch {
+        // Keep the last known badge count if a refresh is temporarily unavailable.
+      }
+    }
+
+    window.addEventListener("orion:notifications-updated", refreshUnreadCount);
+    return () => window.removeEventListener("orion:notifications-updated", refreshUnreadCount);
+  }, []);
+
   function logout() {
     sessionStorage.removeItem("token");
     sessionStorage.removeItem("user");

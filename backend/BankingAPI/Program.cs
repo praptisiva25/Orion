@@ -157,6 +157,7 @@ using (var scope = app.Services.CreateScope())
 
     var db = services
         .GetRequiredService<ApplicationDbContext>();
+        
 
     await RoleSeeder.SeedAsync(roleManager, userManager);
     await AdminSeeder.SeedAsync(userManager, app.Configuration);

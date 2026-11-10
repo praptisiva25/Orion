@@ -29,16 +29,7 @@ public class AdminDashboardController : ControllerBase
     public async Task<IActionResult> GetSummary()
     {
         var customers = await _userManager.GetUsersInRoleAsync("Customer");
-
-        var pendingApplications = await _db.ProductApplications
-            .CountAsync(a => a.Status == "Pending");
-
-        var approvedApplications = await _db.ProductApplications
-            .CountAsync(a => a.Status == "Approved");
-
-        var pendingKyc = await _db.KycDocuments
-            .CountAsync(k => k.Status == "Pending");
-
+        var officers = await _userManager.GetUsersInRoleAsync("Officer");
         var recentApplications = await (
             from application in _db.ProductApplications
             join user in _db.Users
@@ -69,19 +60,51 @@ public class AdminDashboardController : ControllerBase
             }
         ).Take(10).ToListAsync();
 
-        var recentActivity = recentApplications
-            .Concat(recentKyc)
-            .OrderByDescending(a => a.Timestamp)
+        var recentTickets = await (
+            from ticket in _db.SupportTickets.AsNoTracking()
+            join customer in _db.Users.AsNoTracking() on ticket.UserId equals customer.Id
+            join assigned in _db.Users.AsNoTracking()
+                on ticket.AssignedOfficerId equals (int?)assigned.Id into assignedUsers
+            from assigned in assignedUsers.DefaultIfEmpty()
+            orderby ticket.UpdatedAt descending
+            select new RecentActivityDto
+            {
+                Type = "Support Ticket",
+                Description = $"{ticket.Subject} · {customer.FullName}" +
+                    (assigned == null ? " · Unassigned" : $" · Assigned to {assigned.FullName}"),
+                Status = ticket.Status,
+                Timestamp = ticket.UpdatedAt
+            }).Take(5).ToListAsync();
+
+        var recentOfficers = officers.OrderByDescending(o => o.CreatedAt)
             .Take(5)
-            .ToList();
+            .Select(o => new AdminOfficerSummaryDto
+            {
+                Id = o.Id,
+                FullName = o.FullName,
+                Email = o.Email ?? string.Empty,
+                IsActive = o.IsActive,
+                CreatedAt = o.CreatedAt
+            }).ToList();
 
         var dashboard = new AdminDashboardDto
         {
             TotalCustomers = customers.Count,
-            PendingApplications = pendingApplications,
-            ApprovedApplications = approvedApplications,
-            PendingKyc = pendingKyc,
-            RecentActivity = recentActivity
+            TotalOfficers = officers.Count,
+            TotalBankingProducts = await _db.BankingProducts.CountAsync(),
+            TotalApplications = await _db.ProductApplications.CountAsync(),
+            PendingApplications = await _db.ProductApplications.CountAsync(a => a.Status == "Pending"),
+            ApprovedApplications = await _db.ProductApplications.CountAsync(a => a.Status == "Approved"),
+            RejectedApplications = await _db.ProductApplications.CountAsync(a => a.Status == "Rejected"),
+            TotalKycDocuments = await _db.KycDocuments.CountAsync(),
+            PendingKyc = await _db.KycDocuments.CountAsync(k => k.Status == "Pending"),
+            TotalSupportTickets = await _db.SupportTickets.CountAsync(),
+            OpenSupportTickets = await _db.SupportTickets.CountAsync(t => t.Status == "Open"),
+            ResolvedSupportTickets = await _db.SupportTickets.CountAsync(t => t.Status == "Resolved" || t.Status == "Closed"),
+            RecentApplications = recentApplications,
+            RecentKycSubmissions = recentKyc,
+            RecentSupportTickets = recentTickets,
+            RecentOfficers = recentOfficers
         };
         
         return Ok(dashboard);

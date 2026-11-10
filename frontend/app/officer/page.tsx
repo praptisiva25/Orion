@@ -9,6 +9,7 @@ import type { KycDocument, SupportTicket } from "@/types/banking";
 export default function OfficerDashboard() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
+  const [applications, setApplications] = useState<Awaited<ReturnType<typeof bankingApi.getOfficerApplications>>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -17,6 +18,7 @@ export default function OfficerDashboard() {
       const results = await Promise.allSettled([
         bankingApi.getOfficerTickets(),
         bankingApi.getAllKycDocuments(),
+        bankingApi.getOfficerApplications(),
       ]);
 
       if (results[0].status === "fulfilled") {
@@ -25,6 +27,10 @@ export default function OfficerDashboard() {
 
       if (results[1].status === "fulfilled") {
         setDocuments(results[1].value);
+      }
+
+      if (results[2].status === "fulfilled") {
+        setApplications(results[2].value);
       }
 
       if (results.some((result) => result.status === "rejected")) {
@@ -80,6 +86,12 @@ export default function OfficerDashboard() {
       detail: "Awaiting review",
       href: "/officer/kyc",
     },
+    {
+      label: "Pending applications",
+      value: applications.length,
+      detail: "Awaiting review",
+      href: "/officer/applications",
+    },
   ];
 
   return (
@@ -111,7 +123,7 @@ export default function OfficerDashboard() {
           Work overview
         </h2>
 
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
           {cards.map((card) => (
             <Link
               key={card.label}
@@ -185,6 +197,12 @@ export default function OfficerDashboard() {
               className="block rounded-lg border border-slate-100 px-4 py-4 text-sm font-medium text-[#172C46] hover:bg-[#F8FAF8]"
             >
               Review KYC documents →
+            </Link>
+            <Link
+              href="/officer/applications"
+              className="block rounded-lg border border-slate-100 px-4 py-4 text-sm font-medium text-[#172C46] hover:bg-[#F8FAF8]"
+            >
+              Review applications →
             </Link>
           </div>
         </div>

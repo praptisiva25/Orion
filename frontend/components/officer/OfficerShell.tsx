@@ -10,6 +10,7 @@ const navigation = [
   { label: "Dashboard", href: "/officer", icon: "◫" },
   { label: "Assigned Tickets", href: "/officer/tickets", icon: "▣" },
   { label: "KYC Reviews", href: "/officer/kyc", icon: "◇" },
+  { label: "Applications", href: "/officer/applications", icon: "◉" },
 ];
 
 export default function OfficerShell({

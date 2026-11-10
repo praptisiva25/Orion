@@ -20,9 +20,12 @@ export default function KycPage() {
   }
 
   useEffect(() => {
-    loadDocuments()
-      .catch((err) => setError(err.message || "Unable to load documents."))
-      .finally(() => setLoading(false));
+    let active = true;
+    bankingApi.getKycDocuments()
+      .then((data) => { if (active) setDocuments(data); })
+      .catch((err) => { if (active) setError(err.message || "Unable to load documents."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   async function handleUpload(e: React.FormEvent) {
@@ -180,6 +183,16 @@ export default function KycPage() {
                     Uploaded{" "}
                     {new Date(document.uploadedAt).toLocaleDateString("en-IN")}
                   </p>
+                  {document.reviewedAt && (
+                    <p className="mt-2 text-xs text-slate-400">
+                      Reviewed {new Date(document.reviewedAt).toLocaleDateString("en-IN")}
+                    </p>
+                  )}
+                  {document.status.toLowerCase() === "rejected" && document.reviewReason && (
+                    <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                      Review reason: {document.reviewReason}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

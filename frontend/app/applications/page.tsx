@@ -82,7 +82,7 @@ export default function ApplicationsPage() {
                   <th className="px-6 py-4">Amount</th>
                   <th className="px-6 py-4">Applied on</th>
                   <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Remarks</th>
+                  <th className="px-6 py-4">Remarks / review reason</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,7 +106,12 @@ export default function ApplicationsPage() {
                       <StatusBadge status={application.status} />
                     </td>
                     <td className="max-w-48 px-6 py-5 text-slate-500">
-                      {application.remarks || "—"}
+                      <div>{application.remarks || "—"}</div>
+                      {application.status.toLowerCase() === "rejected" && application.reviewReason && (
+                        <p className="mt-2 text-xs text-red-700">
+                          Review reason: {application.reviewReason}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 ))}

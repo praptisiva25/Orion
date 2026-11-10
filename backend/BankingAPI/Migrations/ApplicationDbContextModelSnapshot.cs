@@ -247,6 +247,10 @@ namespace BankingAPI.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("ReviewReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -326,8 +330,15 @@ namespace BankingAPI.Migrations
                     b.Property<decimal>("RequestedAmount")
                         .HasColumnType("numeric");
 
+                    b.Property<string>("ReviewReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ReviewedBy")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -339,6 +350,8 @@ namespace BankingAPI.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BankingProductId");
+
+                    b.HasIndex("ReviewedBy");
 
                     b.HasIndex("UserId");
 
@@ -633,6 +646,11 @@ namespace BankingAPI.Migrations
                         .HasForeignKey("BankingProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("BankingAPI.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("BankingAPI.Models.ApplicationUser", null)
                         .WithMany()

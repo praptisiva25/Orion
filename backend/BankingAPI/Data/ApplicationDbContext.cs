@@ -53,6 +53,12 @@ namespace BankingAPI.Data
              .HasForeignKey(a => a.BankingProductId)
              .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<ProductApplication>()
+             .HasOne<ApplicationUser>()
+             .WithMany()
+             .HasForeignKey(a => a.ReviewedBy)
+             .OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<KycDocument>()
              .HasOne<ApplicationUser>()
              .WithMany()

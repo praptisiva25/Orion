@@ -21,4 +21,9 @@ public class ProductApplication
     public DateTime AppliedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? ReviewedAt { get; set; }
+
+    public int? ReviewedBy { get; set; }
+
+    [MaxLength(1000)]
+    public string? ReviewReason { get; set; }
 }

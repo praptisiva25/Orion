@@ -10,17 +10,13 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function loadNotifications() {
-    const data = await bankingApi.getNotifications();
-    setNotifications(data);
-  }
-
   useEffect(() => {
-    loadNotifications()
-      .catch((err) =>
-        setError(err.message || "Unable to load notifications.")
-      )
-      .finally(() => setLoading(false));
+    let active = true;
+    bankingApi.getNotifications()
+      .then((data) => { if (active) setNotifications(data); })
+      .catch((err) => { if (active) setError(err.message || "Unable to load notifications."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   async function markAsRead(id: number) {
@@ -32,6 +28,7 @@ export default function NotificationsPage() {
           item.id === id ? { ...item, isRead: true } : item
         )
       );
+      window.dispatchEvent(new Event("orion:notifications-updated"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update.");
     }
@@ -48,6 +45,7 @@ export default function NotificationsPage() {
       setNotifications((previous) =>
         previous.map((item) => ({ ...item, isRead: true }))
       );
+      window.dispatchEvent(new Event("orion:notifications-updated"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update.");
     }
@@ -89,7 +87,7 @@ export default function NotificationsPage() {
           </p>
         ) : notifications.length === 0 ? (
           <p className="p-10 text-center text-sm text-slate-500">
-            You're all caught up. No notifications yet.
+            You&apos;re all caught up. No notifications yet.
           </p>
         ) : (
           <div>

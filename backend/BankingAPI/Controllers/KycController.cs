@@ -68,6 +68,17 @@ public class KycController : ControllerBase
             });
         }
 
+        var header = new byte[8];
+        await using (var validationStream = file.OpenReadStream())
+        {
+            var bytesRead = await validationStream.ReadAsync(header);
+            if (!HasExpectedSignature(extension, header, bytesRead))
+                return BadRequest(new
+                {
+                    message = "The file content does not match its extension."
+                });
+        }
+
         var userId = int.Parse(
             User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -155,7 +166,8 @@ public class KycController : ControllerBase
                 FileName = d.FileName,
                 Status = d.Status,
                 UploadedAt = d.UploadedAt,
-                ReviewedAt = d.ReviewedAt
+                ReviewedAt = d.ReviewedAt,
+                ReviewReason = d.ReviewReason
             })
             .ToListAsync();
 
@@ -168,21 +180,95 @@ public class KycController : ControllerBase
     public async Task<ActionResult<List<KycDocumentResponseDto>>>
         GetAllDocuments()
     {
-        var documents = await _db.KycDocuments
-            .OrderByDescending(d => d.UploadedAt)
-            .Select(d => new KycDocumentResponseDto
+        var documents = await (
+            from document in _db.KycDocuments.AsNoTracking()
+            join customer in _db.Users.AsNoTracking()
+                on document.UserId equals customer.Id
+            orderby document.UploadedAt descending
+            select new KycDocumentResponseDto
             {
-                Id = d.Id,
-                UserId = d.UserId,
-                DocumentType = d.DocumentType,
-                FileName = d.FileName,
-                Status = d.Status,
-                UploadedAt = d.UploadedAt,
-                ReviewedAt = d.ReviewedAt
+                Id = document.Id,
+                UserId = document.UserId,
+                CustomerName = customer.FullName,
+                CustomerEmail = customer.Email,
+                DocumentType = document.DocumentType,
+                FileName = document.FileName,
+                Status = document.Status,
+                UploadedAt = document.UploadedAt,
+                ReviewedAt = document.ReviewedAt,
+                ReviewReason = document.ReviewReason,
+                ReviewerName = _db.Users.Where(u => u.Id == document.ReviewedBy)
+                    .Select(u => u.FullName).FirstOrDefault()
             })
             .ToListAsync();
 
         return Ok(documents);
+    }
+
+    // Reviewer file access is authenticated and never returns the stored path.
+    [HttpGet("{id:int}/file")]
+    [Authorize(Roles = "Admin,Officer")]
+    public async Task<IActionResult> GetDocumentFile(
+        int id,
+        [FromQuery] bool download = false)
+    {
+        var document = await _db.KycDocuments
+            .AsNoTracking()
+            .Where(d => d.Id == id)
+            .Select(d => new { d.FilePath, d.FileName })
+            .FirstOrDefaultAsync();
+
+        if (document == null)
+            return NotFound(new { message = "Document not found." });
+
+        var extension = Path.GetExtension(document.FileName).ToLowerInvariant();
+        var contentType = extension switch
+        {
+            ".pdf" => "application/pdf",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            _ => null
+        };
+
+        if (contentType == null)
+            return BadRequest(new { message = "Stored document type is not supported." });
+
+        string fullPath;
+        string rootPath;
+        try
+        {
+            rootPath = Path.GetFullPath(Path.Combine(
+                _environment.ContentRootPath, "PrivateUploads", "Kyc"));
+            fullPath = Path.GetFullPath(document.FilePath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return NotFound(new { message = "Document file is unavailable." });
+        }
+
+        var rootPrefix = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) ||
+            !System.IO.File.Exists(fullPath))
+        {
+            return NotFound(new { message = "Document file is unavailable." });
+        }
+
+        await using (var stream = System.IO.File.OpenRead(fullPath))
+        {
+            var header = new byte[8];
+            var bytesRead = await stream.ReadAsync(header);
+            if (!HasExpectedSignature(extension, header, bytesRead))
+                return BadRequest(new { message = "Stored file content does not match its type." });
+        }
+
+        var safeFileName = Path.GetFileName(document.FileName).Replace("\"", "");
+        var disposition = download ? "attachment" : "inline";
+        Response.Headers["Content-Disposition"] =
+            $"{disposition}; filename*=UTF-8''{Uri.EscapeDataString(safeFileName)}";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+
+        return PhysicalFile(fullPath, contentType, enableRangeProcessing: true);
     }
 
     // Admin and Officer review documents
@@ -207,22 +293,38 @@ public class KycController : ControllerBase
                 message = "Only pending documents can be reviewed."
             });
 
+        var reviewReason = request.ReviewReason?.Trim();
+        if (request.Status == "Rejected" && string.IsNullOrWhiteSpace(reviewReason))
+            return BadRequest(new { message = "A reason is required when rejecting a document." });
+
         var reviewerId = int.Parse(
             User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        document.Status = request.Status;
-        document.ReviewedAt = DateTime.UtcNow;
-        document.ReviewedBy = reviewerId;
+        var reviewedAt = DateTime.UtcNow;
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        var updated = await _db.KycDocuments
+            .Where(d => d.Id == id && d.Status == "Pending")
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(d => d.Status, request.Status)
+                .SetProperty(d => d.ReviewedAt, reviewedAt)
+                .SetProperty(d => d.ReviewedBy, reviewerId)
+                .SetProperty(d => d.ReviewReason,
+                    request.Status == "Rejected" ? reviewReason : null));
 
-        await _db.SaveChangesAsync();
-        
+        if (updated == 0)
+            return Conflict(new { message = "This document has already been reviewed." });
+
+        var notificationMessage = request.Status == "Rejected"
+            ? $"Your {document.DocumentType} document was rejected. Reason: {reviewReason}"
+            : $"Your {document.DocumentType} document has been verified.";
+
         await _auditLog.LogAsync(
-            reviewerId,
-            $"KYC Document {document.Status}",
-            "KycDocument",
-            document.Id,
-            $"Officer reviewed the {document.DocumentType} document and marked it as {document.Status}."
-        );
+            reviewerId, $"KYC Document {request.Status}", "KycDocument", id,
+            $"Reviewer marked the {document.DocumentType} document as {request.Status}." +
+            (reviewReason == null ? string.Empty : $" Reason: {reviewReason}"));
+        await _notificationService.CreateAsync(
+            document.UserId, $"KYC Document {request.Status}", notificationMessage);
+        await transaction.CommitAsync();
 
         return Ok(new
         {
@@ -230,9 +332,20 @@ public class KycController : ControllerBase
             document = new
             {
                 document.Id,
-                document.Status,
-                document.ReviewedAt
+                status = request.Status,
+                reviewedAt
             }
         });
+    }
+
+    private static bool HasExpectedSignature(string extension, byte[] header, int bytesRead)
+    {
+        return extension switch
+        {
+            ".pdf" => bytesRead >= 5 && header.AsSpan(0, 5).SequenceEqual("%PDF-"u8),
+            ".jpg" or ".jpeg" => bytesRead >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+            ".png" => bytesRead >= 8 && header.AsSpan(0, 8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }),
+            _ => false
+        };
     }
 }

@@ -37,7 +37,9 @@ public class ProductsController : ControllerBase
                 Category = p.Category,
                 Description = p.Description,
                 InterestRate = p.InterestRate,
-                MinimumAmount = p.MinimumAmount
+                MinimumAmount = p.MinimumAmount,
+                IsActive = p.IsActive,
+                CreatedAt = p.CreatedAt
             })
             .ToListAsync();
 
@@ -58,7 +60,9 @@ public class ProductsController : ControllerBase
                 Category = p.Category,
                 Description = p.Description,
                 InterestRate = p.InterestRate,
-                MinimumAmount = p.MinimumAmount
+                MinimumAmount = p.MinimumAmount,
+                IsActive = p.IsActive,
+                CreatedAt = p.CreatedAt
             })
             .FirstOrDefaultAsync();
 
@@ -66,6 +70,25 @@ public class ProductsController : ControllerBase
             return NotFound(new { message = "Product not found." });
 
         return Ok(product);
+    }
+
+    [HttpGet("admin")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<List<ProductResponseDto>>> GetAllProductsForAdmin()
+    {
+        return Ok(await _db.BankingProducts.AsNoTracking()
+            .OrderBy(p => p.Name)
+            .Select(p => new ProductResponseDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Category = p.Category,
+                Description = p.Description,
+                InterestRate = p.InterestRate,
+                MinimumAmount = p.MinimumAmount,
+                IsActive = p.IsActive,
+                CreatedAt = p.CreatedAt
+            }).ToListAsync());
     }
 
     // Create product (Admin only)
@@ -105,7 +128,9 @@ public class ProductsController : ControllerBase
             Category = product.Category,
             Description = product.Description,
             InterestRate = product.InterestRate,
-            MinimumAmount = product.MinimumAmount
+            MinimumAmount = product.MinimumAmount,
+            IsActive = product.IsActive,
+            CreatedAt = product.CreatedAt
         };
 
         return CreatedAtAction(
@@ -113,4 +138,50 @@ public class ProductsController : ControllerBase
             new { id = product.Id },
             response);
     }
+
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateProduct(int id, CreateProductRequestDto request)
+    {
+        var product = await _db.BankingProducts.FirstOrDefaultAsync(p => p.Id == id);
+        if (product == null) return NotFound(new { message = "Product not found." });
+        product.Name = request.Name.Trim();
+        product.Category = request.Category.Trim();
+        product.Description = request.Description.Trim();
+        product.InterestRate = request.InterestRate;
+        product.MinimumAmount = request.MinimumAmount;
+        await _db.SaveChangesAsync();
+        var adminId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        await _auditLog.LogAsync(adminId, "Banking Product Updated", "BankingProduct", id,
+            $"Admin updated the {product.Name} product.");
+        return Ok(new { message = "Product updated.", product = ToResponse(product) });
+    }
+
+    [HttpPut("{id:int}/status")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateProductStatus(int id, [FromQuery] bool isActive)
+    {
+        var product = await _db.BankingProducts.FirstOrDefaultAsync(p => p.Id == id);
+        if (product == null) return NotFound(new { message = "Product not found." });
+        if (product.IsActive == isActive)
+            return BadRequest(new { message = "Product already has this status." });
+        product.IsActive = isActive;
+        await _db.SaveChangesAsync();
+        var adminId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        await _auditLog.LogAsync(adminId, isActive ? "Banking Product Activated" : "Banking Product Deactivated",
+            "BankingProduct", id, $"Admin changed product status to {(isActive ? "Active" : "Inactive")}.");
+        return Ok(new { message = "Product status updated.", product = ToResponse(product) });
+    }
+
+    private static ProductResponseDto ToResponse(BankingProduct product) => new()
+    {
+        Id = product.Id,
+        Name = product.Name,
+        Category = product.Category,
+        Description = product.Description,
+        InterestRate = product.InterestRate,
+        MinimumAmount = product.MinimumAmount,
+        IsActive = product.IsActive,
+        CreatedAt = product.CreatedAt
+    };
 }

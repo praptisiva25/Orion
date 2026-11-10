@@ -48,13 +48,6 @@ public static class AdminSeeder
             if (!updateResult.Succeeded)
                 throw new InvalidOperationException(
                     string.Join("; ", updateResult.Errors.Select(e => e.Description)));
-
-            var token = await userManager.GeneratePasswordResetTokenAsync(user);
-            var resetResult = await userManager.ResetPasswordAsync(user, token, password);
-
-            if (!resetResult.Succeeded)
-                throw new InvalidOperationException(
-                    string.Join("; ", resetResult.Errors.Select(e => e.Description)));
         }
 
         if (!await userManager.IsInRoleAsync(user, "Admin"))

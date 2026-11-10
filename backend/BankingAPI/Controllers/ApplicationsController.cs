@@ -122,11 +122,72 @@ public class ApplicationsController : ControllerBase
                 Status = a.Status,
                 Remarks = a.Remarks,
                 AppliedAt = a.AppliedAt,
-                ReviewedAt = a.ReviewedAt
+                ReviewedAt = a.ReviewedAt,
+                ReviewReason = a.ReviewReason
             })
             .ToListAsync();
 
         return Ok(applications);
+    }
+
+    // Admin and Officer review queue; customer data is limited to display fields.
+    [HttpGet("review-queue")]
+    [Authorize(Roles = "Admin,Officer")]
+    public async Task<ActionResult<List<ApplicationResponseDto>>> GetReviewQueue()
+    {
+        var applications = await (
+            from application in _db.ProductApplications.AsNoTracking()
+            join customer in _db.Users.AsNoTracking()
+                on application.UserId equals customer.Id
+            join product in _db.BankingProducts.AsNoTracking()
+                on application.BankingProductId equals product.Id
+            where application.Status == "Pending"
+            orderby application.AppliedAt
+            select new ApplicationResponseDto
+            {
+                Id = application.Id,
+                UserId = application.UserId,
+                CustomerName = customer.FullName,
+                CustomerEmail = customer.Email,
+                BankingProductId = application.BankingProductId,
+                Product = product.Name,
+                RequestedAmount = application.RequestedAmount,
+                Status = application.Status,
+                Remarks = application.Remarks,
+                AppliedAt = application.AppliedAt,
+                ReviewedAt = application.ReviewedAt,
+                ReviewReason = application.ReviewReason
+            }).ToListAsync();
+
+        return Ok(applications);
+    }
+
+    [HttpGet("review/{id:int}")]
+    [Authorize(Roles = "Admin,Officer")]
+    public async Task<ActionResult<ApplicationResponseDto>> GetReviewDetails(int id)
+    {
+        var application = await (
+            from item in _db.ProductApplications.AsNoTracking()
+            join customer in _db.Users.AsNoTracking() on item.UserId equals customer.Id
+            join product in _db.BankingProducts.AsNoTracking() on item.BankingProductId equals product.Id
+            where item.Id == id
+            select new ApplicationResponseDto
+            {
+                Id = item.Id,
+                UserId = item.UserId,
+                CustomerName = customer.FullName,
+                CustomerEmail = customer.Email,
+                BankingProductId = item.BankingProductId,
+                Product = product.Name,
+                RequestedAmount = item.RequestedAmount,
+                Status = item.Status,
+                Remarks = item.Remarks,
+                AppliedAt = item.AppliedAt,
+                ReviewedAt = item.ReviewedAt,
+                ReviewReason = item.ReviewReason
+            }).FirstOrDefaultAsync();
+
+        return application == null ? NotFound() : Ok(application);
     }
 
     // Admin views all applications
@@ -135,36 +196,41 @@ public class ApplicationsController : ControllerBase
     public async Task<ActionResult<List<ApplicationResponseDto>>>
         GetAllApplications()
     {
-        var applications = await _db.ProductApplications
-            .OrderByDescending(a => a.AppliedAt)
-            .Select(a => new ApplicationResponseDto
+        var applications = await (
+            from application in _db.ProductApplications.AsNoTracking()
+            join customer in _db.Users.AsNoTracking() on application.UserId equals customer.Id
+            join product in _db.BankingProducts.AsNoTracking() on application.BankingProductId equals product.Id
+            orderby application.AppliedAt descending
+            select new ApplicationResponseDto
             {
-                Id = a.Id,
-                UserId = a.UserId,
-                BankingProductId = a.BankingProductId,
-                Product = _db.BankingProducts
-                 .Where(p => p.Id == a.BankingProductId)
-                 .Select(p => p.Name)
-                 .FirstOrDefault() ?? string.Empty,
-                RequestedAmount = a.RequestedAmount,
-                Status = a.Status,
-                Remarks = a.Remarks,
-                AppliedAt = a.AppliedAt,
-                ReviewedAt = a.ReviewedAt
-            })
-            .ToListAsync();
+                Id = application.Id,
+                UserId = application.UserId,
+                CustomerName = customer.FullName,
+                CustomerEmail = customer.Email,
+                BankingProductId = application.BankingProductId,
+                Product = product.Name,
+                RequestedAmount = application.RequestedAmount,
+                Status = application.Status,
+                Remarks = application.Remarks,
+                AppliedAt = application.AppliedAt,
+                ReviewedAt = application.ReviewedAt,
+                ReviewReason = application.ReviewReason,
+                ReviewerName = _db.Users.Where(u => u.Id == application.ReviewedBy)
+                    .Select(u => u.FullName).FirstOrDefault()
+            }).ToListAsync();
 
         return Ok(applications);
     }
 
     // Admin approves or rejects an application
     [HttpPut("{id:int}/status")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Officer")]
     public async Task<IActionResult> UpdateStatus(
         int id,
         UpdateApplicationStatusRequestDto request)
     {
         var application = await _db.ProductApplications
+            .AsNoTracking()
             .FirstOrDefaultAsync(a => a.Id == id);
 
         if (application == null)
@@ -173,27 +239,51 @@ public class ApplicationsController : ControllerBase
                 message = "Application not found."
             });
 
-        application.Status = request.Status;
-        application.ReviewedAt = DateTime.UtcNow;
+        var reviewReason = request.ReviewReason?.Trim();
+        if (request.Status == "Rejected" && string.IsNullOrWhiteSpace(reviewReason))
+            return BadRequest(new { message = "A reason is required when rejecting an application." });
 
-        await _db.SaveChangesAsync();
         var reviewerId = int.Parse(
             User.FindFirstValue(ClaimTypes.NameIdentifier)!
         );
-        
+
+        var reviewedAt = DateTime.UtcNow;
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        var updated = await _db.ProductApplications
+            .Where(a => a.Id == id && a.Status == "Pending")
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.Status, request.Status)
+                .SetProperty(a => a.ReviewedAt, reviewedAt)
+                .SetProperty(a => a.ReviewedBy, reviewerId)
+                .SetProperty(a => a.ReviewReason,
+                    request.Status == "Rejected" ? reviewReason : null));
+
+        if (updated == 0)
+            return Conflict(new { message = "This application has already been reviewed." });
+
         await _auditLog.LogAsync(
             reviewerId,
-            $"Application {application.Status}",
+            $"Application {request.Status}",
             "ProductApplication",
             application.Id,
-            $"Admin changed application status to {application.Status}."
+            $"Reviewer changed application status to {request.Status}." +
+            (reviewReason == null ? string.Empty : $" Reason: {reviewReason}")
         );
+
+        var productName = await _db.BankingProducts
+            .Where(p => p.Id == application.BankingProductId)
+            .Select(p => p.Name)
+            .FirstOrDefaultAsync() ?? "your product";
+        var notificationMessage = request.Status == "Rejected"
+            ? $"Your application for {productName} was rejected. Reason: {reviewReason}"
+            : $"Your application for {productName} has been approved.";
 
         await _notificationService.CreateAsync(
             application.UserId,
-            $"Application {application.Status}",
-            $"Your application for {application.Status.ToLower()} has been {application.Status.ToLower()}."
+            $"Application {request.Status}",
+            notificationMessage
         );
+        await transaction.CommitAsync();
 
         return Ok(new
         {
@@ -201,7 +291,9 @@ public class ApplicationsController : ControllerBase
             application = new
             {
                 application.Id,
-                application.Status
+                status = request.Status,
+                reviewedAt,
+                reviewReason
             }
         });
     }

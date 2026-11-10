@@ -1,5 +1,6 @@
 
 using BankingAPI.Models;
+using BankingAPI.Data;
 using BankingAPI.DTOs.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -17,13 +18,16 @@ public class AuthController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
+    private readonly ApplicationDbContext _db;
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ApplicationDbContext db)
     {
         _userManager = userManager;
         _configuration = configuration;
+        _db = db;
     }
 
     [HttpPost("register")]
@@ -43,6 +47,10 @@ public class AuthController : ControllerBase
             IsActive = true
         };
 
+        // UserManager and the profile use the same scoped DbContext, so the
+        // transaction makes account, role and profile creation atomic.
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+
         var result = await _userManager.CreateAsync(user, request.Password);
 
         if (!result.Succeeded)
@@ -57,7 +65,7 @@ public class AuthController : ControllerBase
 
         if (!roleResult.Succeeded)
         {
-            await _userManager.DeleteAsync(user);
+            await transaction.RollbackAsync();
 
             return StatusCode(500, new
             {
@@ -65,6 +73,14 @@ public class AuthController : ControllerBase
                 errors = roleResult.Errors.Select(e => e.Description)
             });
         }
+
+        _db.CustomerProfiles.Add(new CustomerProfile
+        {
+            UserId = user.Id
+        });
+
+        await _db.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return Ok(new { message = "Registration successful." });
     }
