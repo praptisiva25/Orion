@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { bankingApi } from "@/lib/api";
 import type { AdminAuditLog } from "@/types/banking";
+import { useAdminAuth } from "@/components/admin/AdminAuthContext";
 
 export default function AdminAuditLogsPage() {
   const [logs, setLogs] = useState<AdminAuditLog[]>([]);
@@ -19,15 +20,55 @@ export default function AdminAuditLogsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const authorized = useAdminAuth();
 
   useEffect(() => {
-    let active = true;
-    bankingApi.getAdminAuditLogs({ search, action, entityType, category, actorId: actorId ? Number(actorId) : undefined, entityId: entityId ? Number(entityId) : undefined, fromDate: fromDate || undefined, toDate: toDate || undefined, page, pageSize: 25 })
-      .then((result) => { if (active) { setLogs(result.items); setTotalCount(result.totalCount); } })
-      .catch((err) => { if (active) setError(err.message || "Unable to load audit logs."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [search, action, entityType, category, actorId, entityId, fromDate, toDate, page]);
+  if (!authorized) return;
+
+  let active = true;
+
+  bankingApi.getAdminAuditLogs({
+    search,
+    action,
+    entityType,
+    category,
+    actorId: actorId ? Number(actorId) : undefined,
+    entityId: entityId ? Number(entityId) : undefined,
+    fromDate: fromDate || undefined,
+    toDate: toDate || undefined,
+    page,
+    pageSize: 25,
+  })
+    .then((result) => {
+      if (active) {
+        setLogs(result.items);
+        setTotalCount(result.totalCount);
+      }
+    })
+    .catch((err) => {
+      if (active) {
+        setError(err.message || "Unable to load audit logs.");
+      }
+    })
+    .finally(() => {
+      if (active) setLoading(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [
+  authorized,
+  search,
+  action,
+  entityType,
+  category,
+  actorId,
+  entityId,
+  fromDate,
+  toDate,
+  page,
+]);
 
   function changeFilter(setter: (value: string) => void, value: string) { setter(value); setPage(1); }
   return <div><div className="mb-7"><h1 className="text-3xl font-semibold text-[#172C46]">Audit Logs</h1><p className="mt-2 text-sm text-slate-500">Review administrative and operational actions.</p></div>

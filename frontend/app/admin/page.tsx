@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { bankingApi } from "@/lib/api";
 import type { AdminActivity, AdminDashboard } from "@/types/banking";
+import { useAdminAuth } from "@/components/admin/AdminAuthContext";
 
 function ActivitySection({ title, items, href, loading }: { title: string; items: AdminActivity[]; href: string; loading: boolean }) {
   return <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-[#172C46]">{title}</h2><Link href={href} className="text-xs font-medium text-[#456B58] hover:underline">View all</Link></div>
@@ -15,15 +16,28 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const authorized = useAdminAuth();
 
   useEffect(() => {
-    let active = true;
-    bankingApi.getAdminDashboard()
-      .then((result) => { if (active) setData(result); })
-      .catch((err) => { if (active) setError(err.message || "Unable to load dashboard."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
+  if (!authorized) return;
+
+  let active = true;
+
+  bankingApi.getAdminDashboard()
+    .then((result) => {
+      if (active) setData(result);
+    })
+    .catch((err) => {
+      if (active) setError(err.message || "Unable to load dashboard.");
+    })
+    .finally(() => {
+      if (active) setLoading(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [authorized]);
 
   const stats = [
     ["Customers", data?.totalCustomers, "/admin/customers"],

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { bankingApi } from "@/lib/api";
 import type { AdminOfficer } from "@/types/banking";
+import { useAdminAuth } from "@/components/admin/AdminAuthContext";
 
 export default function AdminOfficersPage() {
   const [officers, setOfficers] = useState<AdminOfficer[]>([]);
@@ -12,15 +13,31 @@ export default function AdminOfficersPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const authorized = useAdminAuth();
 
   async function load() { setOfficers(await bankingApi.getAdminOfficers()); }
   useEffect(() => {
-    let active = true;
-    bankingApi.getAdminOfficers().then((items) => { if (active) setOfficers(items); })
-      .catch((err) => { if (active) setError(err.message || "Unable to load Officers."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
+  if (!authorized) return;
+
+  let active = true;
+
+  bankingApi.getAdminOfficers()
+    .then((items) => {
+      if (active) setOfficers(items);
+    })
+    .catch((err) => {
+      if (active) {
+        setError(err.message || "Unable to load Officers.");
+      }
+    })
+    .finally(() => {
+      if (active) setLoading(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [authorized]);
 
   async function createOfficer(event: React.FormEvent) {
     event.preventDefault(); setError(""); setMessage("");

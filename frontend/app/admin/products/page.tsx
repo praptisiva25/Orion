@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { bankingApi } from "@/lib/api";
 import type { BankingProduct } from "@/types/banking";
+import { useAdminAuth } from "@/components/admin/AdminAuthContext";
 
 type ProductForm = { name: string; category: string; description: string; interestRate: string; minimumAmount: string };
 const emptyForm: ProductForm = { name: "", category: "Loan", description: "", interestRate: "0", minimumAmount: "1" };
@@ -16,15 +17,31 @@ export default function AdminProductsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const authorized = useAdminAuth();
 
   async function load() { setProducts(await bankingApi.getAdminProducts()); }
   useEffect(() => {
-    let active = true;
-    bankingApi.getAdminProducts().then((items) => { if (active) setProducts(items); })
-      .catch((err) => { if (active) setError(err.message || "Unable to load products."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
+  if (!authorized) return;
+
+  let active = true;
+
+  bankingApi.getAdminProducts()
+    .then((items) => {
+      if (active) setProducts(items);
+    })
+    .catch((err) => {
+      if (active) {
+        setError(err.message || "Unable to load products.");
+      }
+    })
+    .finally(() => {
+      if (active) setLoading(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [authorized]);
 
   function openCreate() { setEditing(null); setForm(emptyForm); setShowForm(true); setError(""); }
   function openEdit(product: BankingProduct) {

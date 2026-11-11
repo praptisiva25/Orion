@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { bankingApi } from "@/lib/api";
 import type { KycDocument } from "@/types/banking";
+import { useAdminAuth } from "@/components/admin/AdminAuthContext";
 
 export default function AdminKycPage() {
   const [documents, setDocuments] = useState<KycDocument[]>([]);
@@ -15,14 +16,30 @@ export default function AdminKycPage() {
   const [reason, setReason] = useState("");
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ document: KycDocument; url: string } | null>(null);
+  const authorized = useAdminAuth();
   async function load() { setDocuments(await bankingApi.getAllKycDocuments()); }
   useEffect(() => {
-    let active = true;
-    bankingApi.getAllKycDocuments().then((items) => { if (active) setDocuments(items); })
-      .catch((err) => { if (active) setError(err.message || "Unable to load KYC documents."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
+  if (!authorized) return;
+
+  let active = true;
+
+  bankingApi.getAllKycDocuments()
+    .then((items) => {
+      if (active) setDocuments(items);
+    })
+    .catch((err) => {
+      if (active) {
+        setError(err.message || "Unable to load KYC documents.");
+      }
+    })
+    .finally(() => {
+      if (active) setLoading(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [authorized]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
 
   async function view(document: KycDocument, download = false) {

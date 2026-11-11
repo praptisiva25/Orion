@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { bankingApi } from "@/lib/api";
 import type { AdminOfficer, AdminSupportTicket, AdminTicketMessage } from "@/types/banking";
+import { useAdminAuth } from "@/components/admin/AdminAuthContext";
 
 export default function AdminSupportPage() {
   const [tickets, setTickets] = useState<AdminSupportTicket[]>([]);
@@ -19,6 +20,7 @@ export default function AdminSupportPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const authorized = useAdminAuth();
 
   async function load() {
     const [ticketData, officerData] = await Promise.all([
@@ -28,15 +30,39 @@ export default function AdminSupportPage() {
     setTickets(ticketData); setOfficers(officerData);
   }
   useEffect(() => {
-    let active = true;
-    Promise.all([
-      bankingApi.getAdminSupportTickets({ search, status: status || undefined, priority: priority || undefined, fromDate: fromDate || undefined, toDate: toDate || undefined }),
-      bankingApi.getAdminOfficers(),
-    ]).then(([ticketData, officerData]) => { if (active) { setTickets(ticketData); setOfficers(officerData); } })
-      .catch((err) => { if (active) setError(err.message || "Unable to load support data."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [search, status, priority, fromDate, toDate]);
+  if (!authorized) return;
+
+  let active = true;
+
+  Promise.all([
+    bankingApi.getAdminSupportTickets({
+      search,
+      status: status || undefined,
+      priority: priority || undefined,
+      fromDate: fromDate || undefined,
+      toDate: toDate || undefined,
+    }),
+    bankingApi.getAdminOfficers(),
+  ])
+    .then(([ticketData, officerData]) => {
+      if (active) {
+        setTickets(ticketData);
+        setOfficers(officerData);
+      }
+    })
+    .catch((err) => {
+      if (active) {
+        setError(err.message || "Unable to load support data.");
+      }
+    })
+    .finally(() => {
+      if (active) setLoading(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [authorized, search, status, priority, fromDate, toDate]);
 
   async function openTicket(ticket: AdminSupportTicket) {
     setError("");

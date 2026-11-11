@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { bankingApi } from "@/lib/api";
 import type { AdminCustomer } from "@/types/banking";
+import { useAdminAuth } from "@/components/admin/AdminAuthContext";
 
 export default function AdminCustomersPage() {
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
@@ -12,18 +13,36 @@ export default function AdminCustomersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const authorized = useAdminAuth();
 
   async function load() {
     setCustomers(await bankingApi.getAdminCustomers(search, status === "All" ? undefined : status === "Active"));
   }
   useEffect(() => {
-    let active = true;
-    bankingApi.getAdminCustomers(search, status === "All" ? undefined : status === "Active")
-      .then((items) => { if (active) setCustomers(items); })
-      .catch((err) => { if (active) setError(err.message || "Unable to load customers."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [search, status]);
+  if (!authorized) return;
+
+  let active = true;
+
+  bankingApi.getAdminCustomers(
+    search,
+    status === "All" ? undefined : status === "Active"
+  )
+    .then((items) => {
+      if (active) setCustomers(items);
+    })
+    .catch((err) => {
+      if (active) {
+        setError(err.message || "Unable to load customers.");
+      }
+    })
+    .finally(() => {
+      if (active) setLoading(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [authorized, search, status]);
 
   async function viewDetails(id: number) {
     setError("");
