@@ -30,6 +30,16 @@ $env:INTERNAL_SERVICE_KEY = "<the same key set in ai-service/.env>"
 
 The AI service has a 30-second Groq timeout by default and may make one retry for short summaries. The .NET timeout defaults to 75 seconds to accommodate that retry. Tune both service timeouts together if changing the FastAPI timeout.
 
+## Automatic customer sentiment history
+
+The backend also calls `POST /v1/sentiment/analyze` with `{ "text": "..." }`. The authenticated FastAPI service returns `label`, `confidence`, `model_name`, and nullable `model_version`. The existing `AiService:BaseUrl` and `INTERNAL_SERVICE_KEY` settings above are shared by the .NET clients. Keep the same internal key configured for FastAPI and .NET; never send it to the browser. The worker uses a three-second idle poll and a maximum of eight attempts.
+
+Customer ticket creation enqueues sentiment for its description, and a customer follow-up enqueues a new analysis for the description plus customer-authored messages up to that event. Officer messages are excluded. The ticket/message and corresponding job are committed together in PostgreSQL. A background worker claims jobs using expiring leases and `FOR UPDATE SKIP LOCKED`, retries transient errors with bounded exponential backoff, and records a historical result once per event. History rows retain their event sequence; reports must select the highest sequence among successful records to identify a ticket's latest successful customer-conversation sentiment. No sentiment result changes ticket priority or status.
+
+Resolution lifecycle supports `Resolved` and `Closed`, and resolved tickets may return to active status. This batch does not enqueue a separate resolution analysis: the latest successful customer-originated event remains the meaningful conversation sentiment across resolve/reopen cycles, while an optional resolution snapshot would need a dedicated, explicitly defined event and should be added separately.
+
+The schema change is supplied as an EF migration only. It is not applied by the application at startup.
+
 ## Run locally
 
 In one PowerShell window, start FastAPI using its README setup and configuration:

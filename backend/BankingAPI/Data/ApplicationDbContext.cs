@@ -27,6 +27,8 @@ namespace BankingAPI.Data
         public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
         public DbSet<TicketMessage> TicketMessages => Set<TicketMessage>();
+        public DbSet<TicketSentimentJob> TicketSentimentJobs => Set<TicketSentimentJob>();
+        public DbSet<TicketSentiment> TicketSentiments => Set<TicketSentiment>();
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -105,6 +107,40 @@ namespace BankingAPI.Data
             
             modelBuilder.Entity<TicketMessage>()
             .HasIndex(m => new { m.SupportTicketId, m.SentAt });
+
+            modelBuilder.Entity<TicketSentimentJob>(entity =>
+            {
+                entity.HasOne<SupportTicket>().WithMany().HasForeignKey(j => j.SupportTicketId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne<TicketMessage>().WithMany().HasForeignKey(j => j.TicketMessageId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(j => new { j.Status, j.NextAttemptAt, j.CreatedAt });
+                entity.HasIndex(j => new { j.SupportTicketId, j.EventSequence }).IsUnique();
+                entity.Property(j => j.AnalysisStage).HasMaxLength(20);
+                entity.Property(j => j.Status).HasMaxLength(20);
+                entity.Property(j => j.LastFailureCategory).HasMaxLength(50);
+            });
+
+            modelBuilder.Entity<TicketSentiment>(entity =>
+            {
+                entity.HasOne<SupportTicket>().WithMany().HasForeignKey(s => s.SupportTicketId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne<TicketMessage>().WithMany().HasForeignKey(s => s.TicketMessageId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne<TicketSentimentJob>().WithMany().HasForeignKey(s => s.JobId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasIndex(s => s.JobId).IsUnique();
+                entity.HasIndex(s => new { s.SupportTicketId, s.EventSequence }).IsUnique();
+                entity.Property(s => s.AnalysisStage).HasMaxLength(20);
+                entity.Property(s => s.SentimentLabel).HasMaxLength(10);
+                entity.Property(s => s.ModelName).HasMaxLength(200);
+                entity.Property(s => s.ModelRevision).HasMaxLength(100);
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint("CK_TicketSentiments_Label", "\"SentimentLabel\" IN ('negative', 'neutral', 'positive')");
+                    table.HasCheckConstraint("CK_TicketSentiments_Confidence", "\"Confidence\" >= 0 AND \"Confidence\" <= 1");
+                });
+            });
         }
     }
 }

@@ -115,6 +115,7 @@ builder.Services.AddDataProtection();
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<ITicketSentimentQueryService, TicketSentimentQueryService>();
 builder.Services.Configure<AiServiceOptions>(
     builder.Configuration.GetSection(AiServiceOptions.SectionName));
 builder.Services.PostConfigure<AiServiceOptions>(options =>
@@ -137,6 +138,18 @@ builder.Services.AddHttpClient<IAiTicketService, AiTicketService>((services, cli
         ? options.TimeoutSeconds
         : 75);
 }).RedactLoggedHeaders(["Authorization"]);
+builder.Services.AddHttpClient<ISentimentAnalysisClient, SentimentAnalysisClient>((services, client) =>
+{
+    var options = services.GetRequiredService<IOptions<AiServiceOptions>>().Value;
+    if (Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri) &&
+        (baseUri.Scheme == Uri.UriSchemeHttp || baseUri.Scheme == Uri.UriSchemeHttps))
+    {
+        client.BaseAddress = new Uri(options.BaseUrl.EndsWith('/') ? options.BaseUrl : options.BaseUrl + "/");
+    }
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds is >= 1 and <= 180
+        ? options.TimeoutSeconds : 75);
+}).RedactLoggedHeaders(["Authorization"]);
+builder.Services.AddHostedService<TicketSentimentWorker>();
 
 builder.Services.AddControllers();
 

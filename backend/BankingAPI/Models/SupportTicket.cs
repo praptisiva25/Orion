@@ -26,4 +26,7 @@ public class SupportTicket
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    // Orders customer-originated sentiment events, even when model calls finish out of order.
+    public long SentimentEventSequence { get; set; }
 }

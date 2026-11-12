@@ -38,7 +38,8 @@ public class SupportTicketsController : ControllerBase
     // Create a support ticket
     [HttpPost]
     public async Task<IActionResult> CreateTicket(
-        CreateSupportTicketRequestDto request)
+        CreateSupportTicketRequestDto request,
+        CancellationToken cancellationToken)
     {
         var userId = GetUserId();
 
@@ -66,8 +67,20 @@ public class SupportTicketsController : ControllerBase
             UpdatedAt = DateTime.UtcNow
         };
 
-        _db.SupportTickets.Add(ticket);
-        await _db.SaveChangesAsync();
+        await using (var transaction = await _db.Database.BeginTransactionAsync(cancellationToken))
+        {
+            _db.SupportTickets.Add(ticket);
+            await _db.SaveChangesAsync(cancellationToken);
+            _db.TicketSentimentJobs.Add(new TicketSentimentJob
+            {
+                SupportTicketId = ticket.Id,
+                EventSequence = 0,
+                AnalysisStage = "Initial",
+                Status = "Pending"
+            });
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         await _auditLog.LogAsync(
             userId,
@@ -185,27 +198,38 @@ public class SupportTicketsController : ControllerBase
     [HttpPost("{id:int}/messages")]
     public async Task<IActionResult> SendMessage(
         int id,
-        CreateTicketMessageRequestDto request)
+        CreateTicketMessageRequestDto request,
+        CancellationToken cancellationToken)
     {
         var userId = GetUserId();
 
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         var ticket = await _db.SupportTickets
-            .FirstOrDefaultAsync(t =>
-                t.Id == id && t.UserId == userId);
+            .FromSqlInterpolated($"SELECT * FROM \"SupportTickets\" WHERE \"Id\" = {id} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (ticket == null)
+        if (ticket == null || ticket.UserId != userId)
+        {
+            await transaction.RollbackAsync(cancellationToken);
             return NotFound(new { message = "Ticket not found." });
+        }
 
         if (ticket.Status == "Closed")
+        {
+            await transaction.RollbackAsync(cancellationToken);
             return BadRequest(new
             {
                 message = "This ticket is closed and cannot receive new messages."
             });
+        }
 
         var messageText = request.Message.Trim();
 
         if (string.IsNullOrWhiteSpace(messageText))
+        {
+            await transaction.RollbackAsync(cancellationToken);
             return BadRequest(new { message = "Message cannot be empty." });
+        }
 
         var message = new TicketMessage
         {
@@ -219,8 +243,19 @@ public class SupportTicketsController : ControllerBase
         _db.TicketMessages.Add(message);
 
         ticket.UpdatedAt = DateTime.UtcNow;
+        ticket.SentimentEventSequence++;
 
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(cancellationToken);
+        _db.TicketSentimentJobs.Add(new TicketSentimentJob
+        {
+            SupportTicketId = ticket.Id,
+            TicketMessageId = message.Id,
+            EventSequence = ticket.SentimentEventSequence,
+            AnalysisStage = "CustomerFollowUp",
+            Status = "Pending"
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         if (ticket.AssignedOfficerId.HasValue)
         {

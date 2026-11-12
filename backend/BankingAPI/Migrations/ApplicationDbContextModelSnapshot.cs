@@ -382,6 +382,9 @@ namespace BankingAPI.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<long>("SentimentEventSequence")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -441,6 +444,130 @@ namespace BankingAPI.Migrations
                     b.HasIndex("SupportTicketId", "SentAt");
 
                     b.ToTable("TicketMessages");
+                });
+
+            modelBuilder.Entity("BankingAPI.Models.TicketSentiment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AnalysisStage")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("AnalyzedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("Confidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<long>("EventSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("JobId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ModelName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ModelRevision")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SentimentLabel")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int>("SupportTicketId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TicketMessageId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobId")
+                        .IsUnique();
+
+                    b.HasIndex("TicketMessageId");
+
+                    b.HasIndex("SupportTicketId", "EventSequence")
+                        .IsUnique();
+
+                    b.ToTable("TicketSentiments", t =>
+                        {
+                            t.HasCheckConstraint("CK_TicketSentiments_Confidence", "\"Confidence\" >= 0 AND \"Confidence\" <= 1");
+
+                            t.HasCheckConstraint("CK_TicketSentiments_Label", "\"SentimentLabel\" IN ('negative', 'neutral', 'positive')");
+                        });
+                });
+
+            modelBuilder.Entity("BankingAPI.Models.TicketSentimentJob", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AnalysisStage")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("EventSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LastFailureCategory")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LeaseToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("SupportTicketId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TicketMessageId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketMessageId");
+
+                    b.HasIndex("SupportTicketId", "EventSequence")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "NextAttemptAt", "CreatedAt");
+
+                    b.ToTable("TicketSentimentJobs");
                 });
 
             modelBuilder.Entity("BankingAPI.Models.User", b =>
@@ -686,6 +813,40 @@ namespace BankingAPI.Migrations
                         .HasForeignKey("SupportTicketId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("BankingAPI.Models.TicketSentiment", b =>
+                {
+                    b.HasOne("BankingAPI.Models.TicketSentimentJob", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BankingAPI.Models.SupportTicket", null)
+                        .WithMany()
+                        .HasForeignKey("SupportTicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BankingAPI.Models.TicketMessage", null)
+                        .WithMany()
+                        .HasForeignKey("TicketMessageId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("BankingAPI.Models.TicketSentimentJob", b =>
+                {
+                    b.HasOne("BankingAPI.Models.SupportTicket", null)
+                        .WithMany()
+                        .HasForeignKey("SupportTicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BankingAPI.Models.TicketMessage", null)
+                        .WithMany()
+                        .HasForeignKey("TicketMessageId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<int>", b =>
