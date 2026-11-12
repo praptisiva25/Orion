@@ -9,8 +9,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.routes.tickets import router as tickets_router
+from app.api.routes.sentiment import router as sentiment_router
 from app.core.config import get_settings
 from app.core.security import require_internal_service_key
+from app.services.sentiment_analysis import SentimentAnalysisService
 
 for logger_name in ("uvicorn.access", "httpx", "httpcore"):
     logging.getLogger(logger_name).disabled = True
@@ -20,6 +22,11 @@ for logger_name in ("uvicorn.access", "httpx", "httpcore"):
 async def lifespan(application: FastAPI):
     settings = get_settings()
     application.state.generation_limiter = asyncio.Semaphore(settings.max_concurrent_generations)
+    # The service is created once; weights/tokenizer are loaded lazily on first analysis.
+    application.state.sentiment_service = SentimentAnalysisService(
+        tokenizer_model_id=settings.sentiment_tokenizer_id,
+        classifier_model_id=settings.sentiment_model_id,
+    )
     yield
 
 
@@ -41,3 +48,4 @@ async def validation_error_handler(_: Request, __: RequestValidationError) -> JS
 
 
 app.include_router(tickets_router)
+app.include_router(sentiment_router)

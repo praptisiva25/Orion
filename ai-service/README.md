@@ -1,6 +1,6 @@
 # ORION BANK Ticket AI Service
 
-Standalone FastAPI service for transient ticket summaries and Officer response drafts. It has no database connection. The .NET API is expected to authenticate and authorize the Officer, verify ticket assignment, load the ticket and conversation, then call this service with the service-to-service key.
+Standalone FastAPI service for transient ticket summaries, Officer response drafts, and local customer-message sentiment classification. It has no database connection. The .NET API remains responsible for authentication, authorization, ticket ownership, and database operations.
 
 ## Security and data handling
 
@@ -10,6 +10,7 @@ Standalone FastAPI service for transient ticket summaries and Officer response d
 - Ticket text, prompts, provider responses and credentials are never logged. Uvicorn access logging is disabled so request paths and metadata are not recorded by this app.
 - Before sending text to Groq, the service removes common PAN, Aadhaar-like ID, card/account number, IFSC, email, phone and labeled password/PIN/OTP/CVV patterns. Redaction reduces exposure but cannot identify every sensitive value. Do not send secrets in ticket text; apply your organization's data handling and provider-retention requirements before enabling external processing.
 - The service does not persist requests or generated results. Generated text is not guaranteed factual; .NET/Officer workflows must treat it as untrusted draft content.
+- Sentiment analysis runs locally on CPU; sentiment text is never sent to Groq. `SENTIMENT_TOKENIZER_ID` and `SENTIMENT_MODEL_ID` configure the tokenizer and fine-tuned classifier independently. Defaults are `distilbert-base-uncased` and `satishmachine/sentiment-model`. The classifier repository does not contain tokenizer files, so the tokenizer must be loaded from the base DistilBERT repository. Both are downloaded on first use and reused by the running process. Transformers uses its normal Hugging Face cache (set `HF_HOME` to choose a cache location).
 
 ## Local setup
 
@@ -62,6 +63,16 @@ Both endpoints require the internal bearer key and accept `subject` (1–150 cha
 
 - `POST /v1/tickets/summary` returns `{"result":"..."}`. Results shorter than 20 words trigger one regeneration attempt and then a safe provider error.
 - `POST /v1/tickets/suggested-response` returns `{"result":"..."}` and rejects drafts longer than 3000 characters.
+- `POST /v1/sentiment/analyze` accepts `{"text":"..."}` with 1–10000 nonblank characters and returns `label`, `confidence`, `model_name`, and `model_version` (null when the Hub revision is unavailable). Inputs are token-truncated to the model card's 128-token sequence length. Model loading and inference failures return a content-free `503` response.
+
+The sentiment classifier validates the loaded model's own `id2label` metadata and refuses to start inference unless it maps exactly to negative, neutral, and positive. It does not assume label index order. The model card reports an English Twitter dataset and approximately 0.72 accuracy; domain shift for banking messages is possible, and predictions should be treated as estimates rather than urgency or priority. Sentiment remains separate from ticket priority.
+
+For an authenticated local request, use a short synthetic example:
+
+```powershell
+$body = @{ text = "I am disappointed that I still cannot see the payment." } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8001/v1/sentiment/analyze -Headers $headers -ContentType "application/json" -Body $body
+```
 
 Expected errors: `401` for a missing or invalid internal key, `422` for invalid input, `502` for provider failures, and `503` when the service key configuration is unavailable. Never expose provider exception details to callers.
 
