@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Development and API verification
+pytest>=8,<9

@@ -249,6 +249,12 @@ export const bankingApi = {
 
     getOfficerTicket: (id: number) =>
         apiRequest<SupportTicket>(`/api/officer/tickets/${id}`),
+
+    generateOfficerTicketSummary: (id: number) =>
+        apiRequest<{ result: string }>(`/api/officer/tickets/${id}/ai-summary`, { method: "POST" }),
+
+    generateOfficerSuggestedResponse: (id: number) =>
+        apiRequest<{ result: string }>(`/api/officer/tickets/${id}/suggested-response`, { method: "POST" }),
     
     updateOfficerTicketStatus: (
         id: number,

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import OfficerShell from "@/components/officer/OfficerShell";
 import { bankingApi } from "@/lib/api";
 import type { SupportTicket, TicketMessage } from "@/types/banking";
@@ -12,6 +12,8 @@ export default function OfficerTicketsPage() {
   const [messages, setMessages] = useState<TicketMessage[]>([]);
   const [newStatus, setNewStatus] = useState("InProgress");
   const [draft, setDraft] = useState("");
+  const [draftsByTicket, setDraftsByTicket] = useState<Record<number, string>>({});
+  const [aiDraftsByTicket, setAiDraftsByTicket] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -23,6 +25,14 @@ export default function OfficerTicketsPage() {
   const [priority, setPriority] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [aiSummary, setAiSummary] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState("");
+  const [suggestionApplied, setSuggestionApplied] = useState(false);
+  const selectedTicketIdRef = useRef<number | null>(null);
+  const latestDraftRef = useRef("");
 
   async function loadTickets() {
     const data = view === "active" ? await bankingApi.getOfficerTickets() : await bankingApi.getOfficerTicketHistory({ status: filter, priority, fromDate, toDate });
@@ -49,27 +59,104 @@ export default function OfficerTicketsPage() {
     setConversationLoading(true);
     try {
       const data = await bankingApi.getOfficerTicketMessages(ticketId);
-      setMessages(data);
+      if (selectedTicketIdRef.current === ticketId) setMessages(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load messages.");
+      if (selectedTicketIdRef.current === ticketId) {
+        setError(err instanceof Error ? err.message : "Unable to load messages.");
+      }
     } finally {
-      setConversationLoading(false);
+      if (selectedTicketIdRef.current === ticketId) setConversationLoading(false);
     }
   }
 
   async function openTicket(id: number) {
+    selectedTicketIdRef.current = id;
+    setAiSummary("");
+    setSummaryError("");
+    setSummaryLoading(false);
+    setSuggestionError("");
+    setSuggestionLoading(false);
+    setSuggestionApplied(false);
     setError("");
     setMessage("");
     setMessages([]);
-    setDraft("");
+    setConversationLoading(true);
+    setSelected(null);
 
     try {
       const ticket = await bankingApi.getOfficerTicket(id);
+      if (selectedTicketIdRef.current !== id) return;
       setSelected(ticket);
+      const savedDraft = draftsByTicket[id] ?? "";
+      setDraft(savedDraft);
+      latestDraftRef.current = savedDraft;
+      setSuggestionApplied(aiDraftsByTicket[id] ?? false);
       setNewStatus(ticket.status);
       await loadConversation(id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load ticket.");
+      if (selectedTicketIdRef.current === id) {
+        setError(err instanceof Error ? err.message : "Unable to load ticket.");
+        setConversationLoading(false);
+      }
+    }
+  }
+
+  function closeTicketDetails() {
+    selectedTicketIdRef.current = null;
+    setSelected(null);
+    setAiSummary("");
+    setSummaryError("");
+    setSuggestionError("");
+    setSuggestionApplied(false);
+    setMessages([]);
+    setConversationLoading(false);
+    setSummaryLoading(false);
+    setSuggestionLoading(false);
+  }
+
+  async function generateAiSummary() {
+    if (!selected) return;
+    const ticketId = selected.id;
+    setAiSummary("");
+    setSummaryError("");
+    setSummaryLoading(true);
+    try {
+      const response = await bankingApi.generateOfficerTicketSummary(ticketId);
+      if (selectedTicketIdRef.current === ticketId) setAiSummary(response.result);
+    } catch (err) {
+      if (selectedTicketIdRef.current === ticketId) {
+        setSummaryError(err instanceof Error ? err.message : "Unable to generate the AI summary.");
+      }
+    } finally {
+      if (selectedTicketIdRef.current === ticketId) setSummaryLoading(false);
+    }
+  }
+
+  async function suggestResponse() {
+    if (!selected || selected.status.toLowerCase() === "closed") return;
+    const ticketId = selected.id;
+    const draftAtRequest = latestDraftRef.current;
+    setSuggestionError("");
+    setSuggestionLoading(true);
+    try {
+      const response = await bankingApi.generateOfficerSuggestedResponse(ticketId);
+      if (selectedTicketIdRef.current === ticketId) {
+        if (latestDraftRef.current === draftAtRequest) {
+          setDraft(response.result);
+          latestDraftRef.current = response.result;
+          setDraftsByTicket((previous) => ({ ...previous, [ticketId]: response.result }));
+          setAiDraftsByTicket((previous) => ({ ...previous, [ticketId]: true }));
+          setSuggestionApplied(true);
+        } else {
+          setSuggestionError("Your draft changed while the suggestion was generating. Click Suggest Response again if you want to replace it.");
+        }
+      }
+    } catch (err) {
+      if (selectedTicketIdRef.current === ticketId) {
+        setSuggestionError(err instanceof Error ? err.message : "Unable to generate a suggested response.");
+      }
+    } finally {
+      if (selectedTicketIdRef.current === ticketId) setSuggestionLoading(false);
     }
   }
 
@@ -106,6 +193,10 @@ export default function OfficerTicketsPage() {
     try {
       await bankingApi.sendOfficerTicketMessage(selected.id, draft.trim());
       setDraft("");
+      latestDraftRef.current = "";
+      setDraftsByTicket((previous) => ({ ...previous, [selected.id]: "" }));
+      setAiDraftsByTicket((previous) => ({ ...previous, [selected.id]: false }));
+      setSuggestionApplied(false);
       await loadConversation(selected.id);
       await loadTickets();
       setMessage("Your reply has been sent.");
@@ -125,6 +216,7 @@ export default function OfficerTicketsPage() {
 
   const fieldClass =
     "mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#6B8E80]";
+  const selectedTicketIsClosed = selected?.status.toLowerCase() === "closed";
 
   return (
     <OfficerShell
@@ -234,7 +326,7 @@ export default function OfficerTicketsPage() {
                 </h2>
               </div>
               <button
-                onClick={() => setSelected(null)}
+                onClick={closeTicketDetails}
                 className="text-xl text-slate-400 hover:text-slate-700"
                 aria-label="Close ticket details"
               >
@@ -266,6 +358,52 @@ export default function OfficerTicketsPage() {
                   {selected.description}
                 </p>
               </div>
+
+              <section className="mt-6 grid gap-4 border-t border-slate-100 pt-5 md:grid-cols-2">
+                <article className="rounded-xl border border-slate-200 bg-[#F8FAF8] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-[#172C46]">AI Summary</h3>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        AI-generated from this ticket and its conversation. Review it for accuracy.
+                      </p>
+                    </div>
+                    <button
+                      onClick={generateAiSummary}
+                      disabled={summaryLoading}
+                      className="rounded-lg bg-[#172C46] px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+                    >
+                      {summaryLoading ? "Generating summary..." : summaryError ? "Retry summary" : aiSummary ? "Regenerate summary" : "Generate AI Summary"}
+                    </button>
+                  </div>
+                  {summaryLoading && <p className="mt-3 text-sm text-slate-500" role="status">Generating an AI summary...</p>}
+                  {summaryError && <p className="mt-3 text-sm text-red-700" role="alert">{summaryError}</p>}
+                  {aiSummary && <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{aiSummary}</p>}
+                  {!summaryLoading && !summaryError && !aiSummary && <p className="mt-3 text-sm text-slate-400">Generate a summary when you need one.</p>}
+                </article>
+
+                <article className="rounded-xl border border-slate-200 bg-[#F8FAF8] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-[#172C46]">Suggested Response</h3>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        AI-generated draft. Clicking the button places it in the reply box; review and edit it before sending.
+                      </p>
+                    </div>
+                    <button
+                      onClick={suggestResponse}
+                      disabled={suggestionLoading || selectedTicketIsClosed}
+                      className="rounded-lg border border-[#456B58] px-3 py-2 text-xs font-medium text-[#345B4A] disabled:opacity-50"
+                    >
+                      {suggestionLoading ? "Generating suggestion..." : suggestionError ? "Retry suggestion" : draft.trim() ? "Replace draft with suggestion" : "Suggest Response"}
+                    </button>
+                  </div>
+                  {suggestionLoading && <p className="mt-3 text-sm text-slate-500" role="status">Generating an editable draft...</p>}
+                  {suggestionError && <p className="mt-3 text-sm text-red-700" role="alert">{suggestionError}</p>}
+                  {suggestionApplied && <p className="mt-3 text-sm text-[#456B58]" role="status">The AI suggestion is in the reply box. It has not been sent.</p>}
+                  {selectedTicketIsClosed && <p className="mt-3 text-xs text-slate-500">Closed tickets cannot receive replies.</p>}
+                </article>
+              </section>
 
               <div className="mt-6 border-t border-slate-100 pt-5">
                 <div className="flex items-center justify-between gap-3">
@@ -327,7 +465,14 @@ export default function OfficerTicketsPage() {
                   <form onSubmit={sendMessage} className="mt-4">
                     <textarea
                       value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setDraft(value);
+                        latestDraftRef.current = value;
+                        setSuggestionApplied(false);
+                        setDraftsByTicket((previous) => ({ ...previous, [selected.id]: value }));
+                        setAiDraftsByTicket((previous) => ({ ...previous, [selected.id]: false }));
+                      }}
                       maxLength={3000}
                       rows={3}
                       required

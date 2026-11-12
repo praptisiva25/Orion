@@ -1,7 +1,9 @@
 using BankingAPI.Data;
+using BankingAPI.DTOs.AI;
 using BankingAPI.DTOs.SupportTickets;
 using BankingAPI.Models;
 using BankingAPI.Services;
+using BankingAPI.Services.AI;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,15 +19,18 @@ public class OfficerTicketsController : ControllerBase
     private readonly ApplicationDbContext _db;
     private readonly AuditLogService _auditLog;
     private readonly NotificationService _notifications;
+    private readonly IAiTicketService _aiTicketService;
 
     public OfficerTicketsController(
         ApplicationDbContext db,
         AuditLogService auditLog,
-        NotificationService notifications)
+        NotificationService notifications,
+        IAiTicketService aiTicketService)
     {
         _db = db;
         _auditLog = auditLog;
         _notifications = notifications;
+        _aiTicketService = aiTicketService;
     }
 
     private int GetOfficerId()
@@ -79,6 +84,66 @@ public class OfficerTicketsController : ControllerBase
         return Ok(await query.OrderByDescending(t => t.UpdatedAt).Select(t => new SupportTicketResponseDto
         { Id = t.Id, UserId = t.UserId, AssignedOfficerId = t.AssignedOfficerId, Subject = t.Subject, Description = t.Description,
           Status = t.Status, Priority = t.Priority, CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt }).ToListAsync());
+    }
+
+    [HttpPost("{id:int}/ai-summary")]
+    public Task<IActionResult> GenerateAiSummary(int id, CancellationToken cancellationToken) =>
+        GenerateAiResultAsync(id, _aiTicketService.GenerateSummaryAsync, cancellationToken);
+
+    [HttpPost("{id:int}/suggested-response")]
+    public Task<IActionResult> GenerateSuggestedResponse(int id, CancellationToken cancellationToken) =>
+        GenerateAiResultAsync(id, _aiTicketService.GenerateSuggestedResponseAsync, cancellationToken);
+
+    private async Task<IActionResult> GenerateAiResultAsync(
+        int ticketId,
+        Func<AiTicketContextRequestDto, CancellationToken, Task<string>> generate,
+        CancellationToken cancellationToken)
+    {
+        var officerId = GetOfficerId();
+        var ticket = await _db.SupportTickets
+            .AsNoTracking()
+            .Where(t => t.Id == ticketId && t.AssignedOfficerId == officerId)
+            .Select(t => new { t.Subject, t.Description })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (ticket == null)
+            return NotFound(new { message = "Assigned ticket not found." });
+
+        // FastAPI accepts at most 100 messages. Send the latest messages while retaining
+        // chronological order for context when older tickets exceed that limit.
+        var recentMessages = await _db.TicketMessages
+            .AsNoTracking()
+            .Where(message => message.SupportTicketId == ticketId)
+            .OrderByDescending(message => message.SentAt)
+            .ThenByDescending(message => message.Id)
+            .Take(100)
+            .Select(message => new { message.SenderRole, message.Message })
+            .ToListAsync(cancellationToken);
+
+        var request = new AiTicketContextRequestDto
+        {
+            Subject = ticket.Subject,
+            Description = ticket.Description,
+            Messages = recentMessages
+                .AsEnumerable()
+                .Reverse()
+                .Select(message => new AiConversationMessageDto
+                {
+                    SenderRole = message.SenderRole.ToLowerInvariant(),
+                    Message = message.Message
+                })
+                .ToList()
+        };
+
+        try
+        {
+            var result = await generate(request, cancellationToken);
+            return Ok(new AiGeneratedTextResponseDto { Result = result });
+        }
+        catch (AiTicketServiceException exception)
+        {
+            return StatusCode(exception.StatusCode, new { message = exception.Message });
+        }
     }
 
     // Get one assigned ticket

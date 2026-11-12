@@ -21,19 +21,37 @@ export default function SupportPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const descriptionWordCount = description.trim()
+    ? description.trim().split(/\s+/).filter(Boolean).length
+    : 0;
+  const descriptionMeetsMinimum = descriptionWordCount >= 25;
+
   async function loadTickets() {
     const data = await bankingApi.getMyTickets();
     setTickets(data);
   }
 
   useEffect(() => {
-    loadTickets()
-      .catch((err) => setError(err.message || "Unable to load tickets."))
-      .finally(() => setLoading(false));
+    let active = true;
+    async function load() {
+      try {
+        const data = await bankingApi.getMyTickets();
+        if (active) setTickets(data);
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Unable to load tickets.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void load();
+    return () => { active = false; };
   }, []);
 
   async function createTicket(e: React.FormEvent) {
     e.preventDefault();
+    if (!descriptionMeetsMinimum) {
+      return;
+    }
     setSubmitting(true);
     setMessage("");
     setError("");
@@ -164,6 +182,17 @@ export default function SupportPage() {
             className={fieldClass}
             placeholder="Provide details about your query..."
           />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <p className={descriptionMeetsMinimum ? "text-[#456B58]" : "text-amber-700"} aria-live="polite">
+              {descriptionWordCount}/25 words
+            </p>
+            <p className="text-slate-400">{description.length}/3000 characters</p>
+          </div>
+          {!descriptionMeetsMinimum && (
+            <p className="mt-2 text-sm text-amber-700" role="status">
+              Please add at least {25 - descriptionWordCount} more {25 - descriptionWordCount === 1 ? "word" : "words"} to describe your issue.
+            </p>
+          )}
 
           <label className="mt-5 block text-sm text-slate-600">Priority</label>
           <select
@@ -182,7 +211,7 @@ export default function SupportPage() {
           )}
 
           <button
-            disabled={submitting}
+            disabled={submitting || !descriptionMeetsMinimum}
             className="mt-6 w-full rounded-lg bg-[#172C46] px-5 py-3 text-sm font-medium text-white disabled:opacity-50"
           >
             {submitting ? "Creating ticket..." : "Submit ticket"}
@@ -201,7 +230,7 @@ export default function SupportPage() {
             <p className="mt-6 text-sm text-slate-500">Loading tickets...</p>
           ) : tickets.length === 0 ? (
             <p className="mt-8 text-center text-sm text-slate-500">
-              You haven't raised any support tickets.
+              You haven&apos;t raised any support tickets.
             </p>
           ) : (
             <div className="mt-6 space-y-4">

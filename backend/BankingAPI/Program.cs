@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using BankingAPI.Services;
+using BankingAPI.Services.AI;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -113,6 +115,28 @@ builder.Services.AddDataProtection();
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.Configure<AiServiceOptions>(
+    builder.Configuration.GetSection(AiServiceOptions.SectionName));
+builder.Services.PostConfigure<AiServiceOptions>(options =>
+{
+    options.InternalServiceKey = builder.Configuration["INTERNAL_SERVICE_KEY"]
+        ?? options.InternalServiceKey;
+});
+builder.Services.AddHttpClient<IAiTicketService, AiTicketService>((services, client) =>
+{
+    var options = services.GetRequiredService<IOptions<AiServiceOptions>>().Value;
+    if (Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri) &&
+        (baseUri.Scheme == Uri.UriSchemeHttp || baseUri.Scheme == Uri.UriSchemeHttps))
+    {
+        client.BaseAddress = new Uri(options.BaseUrl.EndsWith('/')
+            ? options.BaseUrl
+            : options.BaseUrl + "/");
+    }
+
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds is >= 1 and <= 180
+        ? options.TimeoutSeconds
+        : 75);
+}).RedactLoggedHeaders(["Authorization"]);
 
 builder.Services.AddControllers();
 
