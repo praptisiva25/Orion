@@ -53,7 +53,15 @@ public class AdminSupportTicketsController : ControllerBase
                     };
 
         if (!string.IsNullOrWhiteSpace(search))
-            query = query.Where(t => t.Subject.Contains(search) || t.CustomerName.Contains(search) || t.CustomerEmail.Contains(search));
+        {
+            var normalizedSearch = search.Trim();
+            if (int.TryParse(normalizedSearch, out var ticketId))
+                query = query.Where(t => t.Id == ticketId || t.Subject.Contains(normalizedSearch) ||
+                    t.CustomerName.Contains(normalizedSearch) || t.CustomerEmail.Contains(normalizedSearch));
+            else
+                query = query.Where(t => t.Subject.Contains(normalizedSearch) ||
+                    t.CustomerName.Contains(normalizedSearch) || t.CustomerEmail.Contains(normalizedSearch));
+        }
         if (!string.IsNullOrWhiteSpace(status))
             query = query.Where(t => t.Status == status);
         if (!string.IsNullOrWhiteSpace(priority))

@@ -126,6 +126,49 @@ export interface AdminSupportTicket extends SupportTicket {
   assignedOfficerName: string | null;
 }
 
+export interface AdminSentimentDistribution {
+  totalTickets: number;
+  analyzedTickets: number;
+  unanalyzedTickets: number;
+  positiveCount: number;
+  neutralCount: number;
+  negativeCount: number;
+  positivePercentage: number;
+  neutralPercentage: number;
+  negativePercentage: number;
+}
+
+export interface AdminSentimentTrendPoint {
+  date: string;
+  positiveCount: number;
+  neutralCount: number;
+  negativeCount: number;
+  totalCount: number;
+}
+
+export interface AdminSentimentTrends {
+  fromDate: string;
+  toDate: string;
+  points: AdminSentimentTrendPoint[];
+}
+
+export interface AdminTicketSentimentInsight {
+  ticketId: number;
+  status: string;
+  priority: string;
+  sentimentLabel: "positive" | "neutral" | "negative";
+  confidence: number;
+  analyzedAt: string;
+  eventSequence: number;
+}
+
+export interface AdminTicketSentimentInsightsPage {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  items: AdminTicketSentimentInsight[];
+}
+
 export interface AdminTicketMessage extends TicketMessage {
   senderName: string;
 }

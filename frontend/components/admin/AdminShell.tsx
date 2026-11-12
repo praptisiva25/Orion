@@ -16,6 +16,7 @@ const navigation = [
   ["Applications", "/admin/applications"],
   ["KYC Reviews", "/admin/kyc"],
   ["Support Tickets", "/admin/support"],
+  ["Sentiment Analytics", "/admin/sentiment"],
   ["Audit Logs", "/admin/audit-logs"],
 ] as const;
 

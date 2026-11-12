@@ -3,8 +3,8 @@ using BankingAPI.Controllers;
 using BankingAPI.Data;
 using BankingAPI.DTOs.SupportTickets;
 using BankingAPI.Models;
-using BankingAPI.Services;
 using BankingAPI.Services.AI;
+using BankingAPI.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -210,6 +210,61 @@ public sealed class TicketSentimentPostgresIntegrationTests
         Assert.NotNull(result);
         Assert.Equal(3, result.EventSequence);
         Assert.Equal("positive", result.SentimentLabel);
+    }
+
+    [PostgresFact]
+    public async Task AdminAnalytics_CountsLatestPerTicketAndHistoricalEventsOnce()
+    {
+        var database = await PostgresTestDatabase.CreateRequiredAsync();
+        await using var dbLease = database;
+        var customerId = await database.CreateCustomerAsync();
+        var firstTicket = await database.CreateTicketAsync(customerId);
+        var secondTicket = await database.CreateTicketAsync(customerId);
+        _ = await database.CreateTicketAsync(customerId); // intentionally unanalysed
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var olderTime = today.AddDays(-2).ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc);
+        var newerTime = today.AddDays(-1).ToDateTime(new TimeOnly(10, 0), DateTimeKind.Utc);
+        var otherTime = today.AddDays(-1).ToDateTime(new TimeOnly(11, 0), DateTimeKind.Utc);
+
+        await using (var db = database.CreateContext())
+        {
+            var firstOld = new TicketSentimentJob { SupportTicketId = firstTicket.Id, EventSequence = 1, Status = "Completed" };
+            var firstNew = new TicketSentimentJob { SupportTicketId = firstTicket.Id, EventSequence = 2, Status = "Completed" };
+            var firstFailed = new TicketSentimentJob { SupportTicketId = firstTicket.Id, EventSequence = 3, Status = "Failed" };
+            var secondJob = new TicketSentimentJob { SupportTicketId = secondTicket.Id, EventSequence = 1, Status = "Completed" };
+            db.TicketSentimentJobs.AddRange(firstOld, firstNew, firstFailed, secondJob);
+            await db.SaveChangesAsync();
+            db.TicketSentiments.AddRange(
+                NewSentiment(firstTicket.Id, firstOld.Id, 1, olderTime, "negative"),
+                NewSentiment(firstTicket.Id, firstNew.Id, 2, newerTime, "positive"),
+                NewSentiment(secondTicket.Id, secondJob.Id, 1, otherTime, "neutral"));
+            await db.SaveChangesAsync();
+        }
+
+        await using var analyticsDb = database.CreateContext();
+        var query = new TicketSentimentQueryService(analyticsDb);
+        var analytics = new AdminSentimentAnalyticsService(analyticsDb, query);
+        var distribution = await analytics.GetDistributionAsync(CancellationToken.None);
+        Assert.Equal(3, distribution.TotalTickets);
+        Assert.Equal(2, distribution.AnalyzedTickets);
+        Assert.Equal(1, distribution.UnanalyzedTickets);
+        Assert.Equal(1, distribution.PositiveCount);
+        Assert.Equal(1, distribution.NeutralCount);
+        Assert.Equal(0, distribution.NegativeCount);
+
+        Assert.True(AdminSentimentAnalyticsService.TryResolveRange(today.AddDays(-2), today,
+            out var range, out _));
+        var trends = await analytics.GetTrendsAsync(range, CancellationToken.None);
+        Assert.Equal(3, trends.Points.Count);
+        Assert.Equal(1, trends.Points[0].NegativeCount);
+        Assert.Equal(1, trends.Points[1].PositiveCount);
+        Assert.Equal(1, trends.Points[1].NeutralCount);
+        Assert.Equal(0, trends.Points[2].TotalCount);
+
+        var insights = await analytics.GetTicketInsightsAsync(null, 1, 20, CancellationToken.None);
+        Assert.NotNull(insights);
+        Assert.Equal(2, insights.TotalCount);
+        Assert.Contains(insights.Items, item => item.TicketId == firstTicket.Id && item.SentimentLabel == "positive");
     }
 
     [PostgresFact]

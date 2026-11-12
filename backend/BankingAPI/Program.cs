@@ -115,6 +115,7 @@ builder.Services.AddDataProtection();
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<AdminSentimentAnalyticsService>();
 builder.Services.AddScoped<ITicketSentimentQueryService, TicketSentimentQueryService>();
 builder.Services.Configure<AiServiceOptions>(
     builder.Configuration.GetSection(AiServiceOptions.SectionName));

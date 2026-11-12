@@ -22,6 +22,15 @@ export default function AdminSupportPage() {
   const [message, setMessage] = useState("");
   const authorized = useAdminAuth();
 
+  useEffect(() => {
+    const syncTicketSearch = () => {
+      setSearch(new URLSearchParams(window.location.search).get("search") ?? "");
+    };
+    syncTicketSearch();
+    window.addEventListener("popstate", syncTicketSearch);
+    return () => window.removeEventListener("popstate", syncTicketSearch);
+  }, []);
+
   async function load() {
     const [ticketData, officerData] = await Promise.all([
       bankingApi.getAdminSupportTickets({ search, status: status || undefined, priority: priority || undefined, fromDate: fromDate || undefined, toDate: toDate || undefined }),

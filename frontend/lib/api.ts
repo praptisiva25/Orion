@@ -17,6 +17,9 @@ import type {
   AdminSupportTicket,
   AdminTicketMessage,
   AdminAuditLog,
+  AdminSentimentDistribution,
+  AdminSentimentTrends,
+  AdminTicketSentimentInsightsPage,
 } from "@/types/banking";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -122,6 +125,21 @@ export const bankingApi = {
   getCurrentUser: () => apiRequest<AuthUser>("/api/auth/me"),
 
   getAdminDashboard: () => apiRequest<AdminDashboard>("/api/admin/dashboard/summary"),
+  getAdminSentimentDistribution: () =>
+    apiRequest<AdminSentimentDistribution>("/api/admin/sentiment-analytics/distribution"),
+  getAdminSentimentTrends: (fromDate?: string, toDate?: string) => {
+    const params = new URLSearchParams();
+    if (fromDate) params.set("fromDate", fromDate);
+    if (toDate) params.set("toDate", toDate);
+    return apiRequest<AdminSentimentTrends>(`/api/admin/sentiment-analytics/trends${params.size ? `?${params}` : ""}`);
+  },
+  getAdminTicketSentimentInsights: (options: { label?: string; page?: number; pageSize?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (options.label) params.set("label", options.label);
+    if (options.page !== undefined) params.set("page", String(options.page));
+    if (options.pageSize !== undefined) params.set("pageSize", String(options.pageSize));
+    return apiRequest<AdminTicketSentimentInsightsPage>(`/api/admin/sentiment-analytics/tickets${params.size ? `?${params}` : ""}`);
+  },
   getAdminCustomers: (search = "", isActive?: boolean) => {
     const params = new URLSearchParams();
     if (search.trim()) params.set("search", search.trim());

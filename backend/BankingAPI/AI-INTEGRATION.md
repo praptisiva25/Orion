@@ -40,6 +40,16 @@ Resolution lifecycle supports `Resolved` and `Closed`, and resolved tickets may 
 
 The schema change is supplied as an EF migration only. It is not applied by the application at startup.
 
+## Admin sentiment analytics
+
+Admin-only endpoints are available under `/api/admin/sentiment-analytics`:
+
+- `GET /distribution` counts each ticket once using its highest successful `EventSequence`; percentages use classified tickets as the denominator, and `unanalyzedTickets` is reported separately.
+- `GET /trends?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD` groups successful historical event rows by UTC day. Dates default to the last 30 days and ranges are limited to 366 days.
+- `GET /tickets?page=1&pageSize=20&label=positive` pages through each ticket's latest successful event. The response contains ticket ID, status, priority, label, confidence, timestamp, and event sequence; it does not include customer identity or conversation text.
+
+The Admin dashboard is available at `/admin/sentiment`. Ticket IDs link to the existing Admin support page filtered by that ID. All requests use the existing browser JWT through `apiRequest`; the internal FastAPI key is never sent to the browser.
+
 ## Run locally
 
 In one PowerShell window, start FastAPI using its README setup and configuration:
