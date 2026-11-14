@@ -231,6 +231,39 @@ export interface TicketMessage {
   sentAt: string;
 }
 
+export interface NextBestActionEvidence {
+  evidence_id: string;
+  document_id: string;
+  title: string;
+  source_type: "official_public" | "illustrative_internal";
+  source_label: string;
+  canonical_url: string | null;
+  page_number: number | null;
+  section_heading: string | null;
+  excerpt: string;
+}
+
+export interface NextBestActionRecommendation {
+  title: string;
+  rationale: string;
+  evidence_supported_guidance: string[];
+  additional_suggestions: string[];
+  suggested_actions: string[];
+  missing_information: string[];
+  escalation_conditions: string[];
+  priority: "low" | "normal" | "high" | "urgent" | null;
+  evidence_references: NextBestActionEvidence[];
+  requires_officer_review: true;
+}
+
+export interface NextBestActionResponse {
+  recommendation_mode: "knowledge_backed" | "general_guidance";
+  evidence_available: boolean;
+  recommendations: NextBestActionRecommendation[];
+  disclaimer: string | null;
+  advisory_only: true;
+}
+
 export interface CreateTicketMessageRequest {
   message: string;
 }

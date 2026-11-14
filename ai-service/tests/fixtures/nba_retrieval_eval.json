@@ -1,0 +1,58 @@
+[
+  {
+    "case_id": "failed_atm_withdrawal",
+    "scenario": "failed_atm_withdrawal",
+    "query": "ATM cash was not dispensed but the account shows a debit; how should this failed withdrawal be handled?",
+    "document_id": "synthetic-atm-evidence",
+    "page_number": 1,
+    "section_heading": "Synthetic ATM evidence"
+  },
+  {
+    "case_id": "failed_upi_transaction",
+    "scenario": "failed_upi_transaction",
+    "query": "A UPI payment failed and the customer wants help identifying the transaction status.",
+    "document_id": "synthetic-upi-evidence",
+    "page_number": 2,
+    "section_heading": "Synthetic UPI evidence"
+  },
+  {
+    "case_id": "unauthorised_transaction",
+    "scenario": "unauthorized_transaction",
+    "query": "The customer reports a transaction they did not authorize and asks what information to provide.",
+    "document_id": "synthetic-unauthorized-evidence",
+    "page_number": 3,
+    "section_heading": "Synthetic unauthorized transaction evidence"
+  },
+  {
+    "case_id": "kyc_issue",
+    "scenario": "kyc_document_verification",
+    "query": "The customer has a problem with KYC document verification and needs to understand the pending document issue.",
+    "document_id": "synthetic-kyc-evidence",
+    "page_number": 4,
+    "section_heading": "Synthetic KYC evidence"
+  },
+  {
+    "case_id": "card_complaint",
+    "scenario": "card_related_complaint",
+    "query": "A card is being declined and the customer is asking for help with the card complaint.",
+    "document_id": "synthetic-card-evidence",
+    "page_number": 5,
+    "section_heading": "Synthetic card evidence"
+  },
+  {
+    "case_id": "account_access",
+    "scenario": "account_access_or_blocking",
+    "query": "The customer cannot access their account and wants assistance understanding the access issue.",
+    "document_id": "synthetic-access-evidence",
+    "page_number": 6,
+    "section_heading": "Synthetic account access evidence"
+  },
+  {
+    "case_id": "complaint_escalation",
+    "scenario": "complaint_escalation",
+    "query": "The customer wants to escalate an unresolved complaint and asks where to find the complaint reference.",
+    "document_id": "synthetic-escalation-evidence",
+    "page_number": 7,
+    "section_heading": "Synthetic complaint escalation evidence"
+  }
+]

@@ -14,7 +14,15 @@ class FakeProvider:
         self.results = results
         self.prompts: list[tuple[str, str]] = []
 
-    async def generate(self, *, system_prompt: str, user_prompt: str) -> str:
+    async def generate(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
+        json_mode: bool = False,
+    ) -> str:
         self.prompts.append((system_prompt, user_prompt))
         return self.results.pop(0)
 

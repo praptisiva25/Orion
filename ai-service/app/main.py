@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes.tickets import router as tickets_router
 from app.api.routes.sentiment import router as sentiment_router
+from app.api.routes.nba import router as nba_router
 from app.core.config import get_settings
 from app.core.security import require_internal_service_key
 from app.services.sentiment_analysis import SentimentAnalysisService
@@ -49,3 +50,4 @@ async def validation_error_handler(_: Request, __: RequestValidationError) -> JS
 
 app.include_router(tickets_router)
 app.include_router(sentiment_router)
+app.include_router(nba_router)

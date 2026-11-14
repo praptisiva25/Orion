@@ -11,6 +11,10 @@ public interface IAiTicketService
     Task<string> GenerateSuggestedResponseAsync(
         AiTicketContextRequestDto ticket,
         CancellationToken cancellationToken);
+
+    Task<AiNextBestActionResponseDto> GenerateNextBestActionAsync(
+        AiNextBestActionRequestDto ticket,
+        CancellationToken cancellationToken);
 }
 
 public sealed class AiTicketServiceException(int statusCode, string message) : Exception(message)

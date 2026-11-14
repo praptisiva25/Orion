@@ -72,5 +72,8 @@ Both FastAPI routes require `Authorization: Bearer <INTERNAL_SERVICE_KEY>`. Thei
 
 - `POST /api/officer/tickets/{id}/ai-summary`
 - `POST /api/officer/tickets/{id}/suggested-response`
+- `POST /api/officer/tickets/{id}/next-best-action`
 
-Both use the normal Officer JWT. Only the Officer assigned to the ticket can generate a result. Missing, unassigned, or differently assigned tickets return 404. The most recent 100 messages are sent in chronological order to respect FastAPI's request limit. Ticket content and generated results are not logged or saved by the integration.
+All three use the normal Officer JWT. Only the Officer assigned to the ticket can generate a result. Missing, unassigned, or differently assigned tickets return 404. The ticket AI routes send at most the most recent 100 messages in chronological order to respect FastAPI's request limit. Ticket content and generated results are not logged or saved by the integration.
+
+The Next Best Action endpoint sends ticket ID, subject, description, status, priority, the latest 100 **customer-authored messages only** in chronological order, and the latest successful sentiment (when available). It calls the authenticated FastAPI `POST /v1/nba/recommendations` route using the same internal service key. The response is either `knowledge_backed` with server-constructed references to retrieved approved passages, or `general_guidance` with its mandatory disclaimer and no citations. Every recommendation requires Officer review and separates source-supported guidance from additional suggestions. It does not execute actions or send customer messages. The FastAPI service does not forward the ticket ID to Groq.

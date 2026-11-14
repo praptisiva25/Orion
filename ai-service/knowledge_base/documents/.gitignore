@@ -1,0 +1,5 @@
+*
+!.gitignore
+!README.md
+!orion-demo-bank-policy-v1/
+!orion-demo-bank-policy-v1/**

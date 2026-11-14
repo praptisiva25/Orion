@@ -12,7 +12,15 @@ class FakeProvider:
         self.system_prompt = ""
         self.user_prompt = ""
 
-    async def generate(self, *, system_prompt: str, user_prompt: str) -> str:
+    async def generate(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
+        json_mode: bool = False,
+    ) -> str:
         self.system_prompt = system_prompt
         self.user_prompt = user_prompt
         return self.result

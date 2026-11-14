@@ -3,8 +3,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import OfficerShell from "@/components/officer/OfficerShell";
+import NextBestActionPanel from "@/components/officer/NextBestActionPanel";
 import { bankingApi } from "@/lib/api";
-import type { SupportTicket, TicketMessage } from "@/types/banking";
+import { loadNbaSourceContext, saveNbaSourceContext } from "@/lib/nbaSourceContext";
+import type { NextBestActionResponse, SupportTicket, TicketMessage } from "@/types/banking";
 
 export default function OfficerTicketsPage() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -31,8 +33,13 @@ export default function OfficerTicketsPage() {
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [suggestionError, setSuggestionError] = useState("");
   const [suggestionApplied, setSuggestionApplied] = useState(false);
+  const [nextBestAction, setNextBestAction] = useState<NextBestActionResponse | null>(null);
+  const [nextBestActionLoading, setNextBestActionLoading] = useState(false);
+  const [nextBestActionError, setNextBestActionError] = useState("");
+  const [focusedNbaRecommendationIndex, setFocusedNbaRecommendationIndex] = useState<number | null>(null);
   const selectedTicketIdRef = useRef<number | null>(null);
   const latestDraftRef = useRef("");
+  const restoredRecommendationRef = useRef(false);
 
   async function loadTickets() {
     const data = view === "active" ? await bankingApi.getOfficerTickets() : await bankingApi.getOfficerTicketHistory({ status: filter, priority, fromDate, toDate });
@@ -54,6 +61,53 @@ export default function OfficerTicketsPage() {
     void load();
     return () => { active = false; };
   }, [view, filter, priority, fromDate, toDate]);
+
+  useEffect(() => {
+    if (restoredRecommendationRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("showNba") !== "1") return;
+
+    const ticketId = Number(params.get("ticketId"));
+    const recommendationIndex = Number(params.get("recommendationIndex"));
+    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || !Number.isSafeInteger(recommendationIndex) || recommendationIndex < 0) return;
+
+    restoredRecommendationRef.current = true;
+    selectedTicketIdRef.current = ticketId;
+
+    void (async () => {
+      try {
+        setConversationLoading(true);
+        const ticket = await bankingApi.getOfficerTicket(ticketId);
+        if (selectedTicketIdRef.current !== ticketId) return;
+
+        setSelected(ticket);
+        setNewStatus(ticket.status);
+        setFocusedNbaRecommendationIndex(recommendationIndex);
+
+        const cachedResponse = loadNbaSourceContext(ticketId);
+        if (cachedResponse?.recommendations[recommendationIndex]) {
+          setNextBestAction(cachedResponse);
+        } else {
+          setNextBestActionError("This recommendation context has expired. Generate recommendations again to review its sources.");
+        }
+
+        const ticketMessages = await bankingApi.getOfficerTicketMessages(ticketId);
+        if (selectedTicketIdRef.current === ticketId) setMessages(ticketMessages);
+      } catch {
+        if (selectedTicketIdRef.current === ticketId) {
+          setError("Unable to reopen this assigned ticket. Refresh the ticket list and try again.");
+        }
+      } finally {
+        if (selectedTicketIdRef.current === ticketId) setConversationLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!selected || focusedNbaRecommendationIndex === null) return;
+    document.getElementById(`nba-recommendation-${focusedNbaRecommendationIndex}`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [selected, nextBestAction, focusedNbaRecommendationIndex]);
 
   async function loadConversation(ticketId: number) {
     setConversationLoading(true);
@@ -77,6 +131,10 @@ export default function OfficerTicketsPage() {
     setSuggestionError("");
     setSuggestionLoading(false);
     setSuggestionApplied(false);
+    setNextBestAction(null);
+    setFocusedNbaRecommendationIndex(null);
+    setNextBestActionError("");
+    setNextBestActionLoading(false);
     setError("");
     setMessage("");
     setMessages([]);
@@ -108,6 +166,9 @@ export default function OfficerTicketsPage() {
     setSummaryError("");
     setSuggestionError("");
     setSuggestionApplied(false);
+    setNextBestAction(null);
+    setFocusedNbaRecommendationIndex(null);
+    setNextBestActionError("");
     setMessages([]);
     setConversationLoading(false);
     setSummaryLoading(false);
@@ -129,6 +190,28 @@ export default function OfficerTicketsPage() {
       }
     } finally {
       if (selectedTicketIdRef.current === ticketId) setSummaryLoading(false);
+    }
+  }
+
+  async function generateNextBestAction() {
+    if (!selected) return;
+    const ticketId = selected.id;
+    setNextBestAction(null);
+    setNextBestActionError("");
+    setNextBestActionLoading(true);
+    try {
+      const response = await bankingApi.generateOfficerTicketNextBestAction(ticketId);
+      if (selectedTicketIdRef.current === ticketId) {
+        setNextBestAction(response);
+        saveNbaSourceContext(ticketId, response);
+        setFocusedNbaRecommendationIndex(null);
+      }
+    } catch (err) {
+      if (selectedTicketIdRef.current === ticketId) {
+        setNextBestActionError(err instanceof Error ? err.message : "Unable to generate Next Best Action recommendations.");
+      }
+    } finally {
+      if (selectedTicketIdRef.current === ticketId) setNextBestActionLoading(false);
     }
   }
 
@@ -359,6 +442,14 @@ export default function OfficerTicketsPage() {
                 </p>
               </div>
 
+              <NextBestActionPanel
+                ticketId={selected.id}
+                result={nextBestAction}
+                loading={nextBestActionLoading}
+                error={nextBestActionError}
+                onRefresh={generateNextBestAction}
+                focusedRecommendationIndex={focusedNbaRecommendationIndex}
+              />
               <section className="mt-6 grid gap-4 border-t border-slate-100 pt-5 md:grid-cols-2">
                 <article className="rounded-xl border border-slate-200 bg-[#F8FAF8] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">

@@ -1,0 +1,25 @@
+{
+  "document_id": "rbi-failed-transactions-tat-2019-20-67",
+  "title": "Harmonisation of Turn Around Time (TAT) and customer compensation for failed transactions using authorised Payment Systems",
+  "issuing_organization": "Reserve Bank of India",
+  "canonical_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=11693",
+  "applicability": "The circular states that its framework covers domestic transactions where both originator and beneficiary are in India and applies to failed transactions using authorised payment systems; entity, payment-rail, and later-amendment applicability requires compliance review.",
+  "jurisdiction": "India",
+  "language": "en",
+  "source_type": "official_public",
+  "regulatory_status": "current_as_amended",
+  "scenario_tags": [
+    "failed_atm_withdrawal",
+    "failed_upi_transaction",
+    "transaction_dispute"
+  ],
+  "publication_date": "2019-09-20",
+  "updated_date": null,
+  "effective_date": "2019-10-15",
+  "expiry_date": null,
+  "version": "RBI-2019-20-67",
+  "content_hash": "3e3bf52d9a92b77ff4d18b0f7f801e3b960bb8fb491b5ed5b94e2052c7ceee28",
+  "review_status": "in_review",
+  "reviewer": null,
+  "approval_date": null
+}

@@ -1,0 +1,31 @@
+{
+  "document_id": "orion-demo-bank-policy-v1",
+  "title": "Orion Demo Bank Internal Banking Products, Customer Support and Operations Handbook",
+  "issuing_organization": "Orion Demo Bank",
+  "canonical_url": null,
+  "applicability": "Fictional demonstration content. Local demonstration knowledge base only; not an actual bank policy, RBI guidance, or regulatory requirement.",
+  "jurisdiction": "Fictional demonstration environment",
+  "language": "en",
+  "source_type": "illustrative_internal",
+  "regulatory_status": "not_applicable",
+  "scenario_tags": [
+    "failed_atm_withdrawal",
+    "failed_upi_transaction",
+    "unauthorized_transaction",
+    "account_access_or_blocking",
+    "kyc_document_verification",
+    "card_related_complaint",
+    "transaction_dispute",
+    "complaint_escalation"
+  ],
+  "publication_date": null,
+  "updated_date": null,
+  "effective_date": "2026-11-01",
+  "expiry_date": null,
+  "version": "1.0",
+  "content_hash": "ae179c044dc845161bcfb6dbfbba3dfce8f26de9d92e48874e167f8eac94e06b",
+  "review_status": "approved",
+  "approval_scope": "Local demonstration knowledge base only",
+  "reviewer": "User-provided approval (reviewer identity not specified)",
+  "approval_date": "2026-11-14"
+}

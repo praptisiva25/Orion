@@ -1,0 +1,24 @@
+{
+  "document_id": "rbi-atm-wla-faq",
+  "title": "ATM/White Label ATM",
+  "issuing_organization": "Reserve Bank of India",
+  "canonical_url": "https://www.rbi.org.in/commonman/Upload/English/FAQs/PDFs/FAQATM04072025.pdf",
+  "applicability": "RBI public FAQ information about ATM and White Label ATM services in India; not an internal bank operating procedure.",
+  "jurisdiction": "India",
+  "language": "en",
+  "source_type": "official_public",
+  "regulatory_status": "current",
+  "scenario_tags": [
+    "failed_atm_withdrawal",
+    "card_related_complaint"
+  ],
+  "publication_date": null,
+  "updated_date": "2025-07-04",
+  "effective_date": null,
+  "expiry_date": null,
+  "version": "updated-2025-07-04",
+  "content_hash": "1afd706aad2dd70d82bd0a94aed779efa4cff153be123fa08bb66c0eb75ca35d",
+  "review_status": "in_review",
+  "reviewer": null,
+  "approval_date": null
+}

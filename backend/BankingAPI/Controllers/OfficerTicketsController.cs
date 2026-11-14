@@ -20,17 +20,20 @@ public class OfficerTicketsController : ControllerBase
     private readonly AuditLogService _auditLog;
     private readonly NotificationService _notifications;
     private readonly IAiTicketService _aiTicketService;
+    private readonly ITicketSentimentQueryService _ticketSentimentQuery;
 
     public OfficerTicketsController(
         ApplicationDbContext db,
         AuditLogService auditLog,
         NotificationService notifications,
-        IAiTicketService aiTicketService)
+        IAiTicketService aiTicketService,
+        ITicketSentimentQueryService ticketSentimentQuery)
     {
         _db = db;
         _auditLog = auditLog;
         _notifications = notifications;
         _aiTicketService = aiTicketService;
+        _ticketSentimentQuery = ticketSentimentQuery;
     }
 
     private int GetOfficerId()
@@ -93,6 +96,61 @@ public class OfficerTicketsController : ControllerBase
     [HttpPost("{id:int}/suggested-response")]
     public Task<IActionResult> GenerateSuggestedResponse(int id, CancellationToken cancellationToken) =>
         GenerateAiResultAsync(id, _aiTicketService.GenerateSuggestedResponseAsync, cancellationToken);
+
+    [HttpPost("{id:int}/next-best-action")]
+    public async Task<IActionResult> GenerateNextBestAction(int id, CancellationToken cancellationToken)
+    {
+        var officerId = GetOfficerId();
+        var ticket = await _db.SupportTickets
+            .AsNoTracking()
+            .Where(t => t.Id == id && t.AssignedOfficerId == officerId)
+            .Select(t => new { t.Id, t.Subject, t.Description, t.Status, t.Priority })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (ticket == null)
+            return NotFound(new { message = "Assigned ticket not found." });
+
+        // NBA context contains customer-authored messages only. Select the latest bounded
+        // window, then restore ascending chronology for the model request.
+        var customerMessages = await _db.TicketMessages
+            .AsNoTracking()
+            .Where(message => message.SupportTicketId == id && message.SenderRole.ToLower() == "customer")
+            .OrderByDescending(message => message.SentAt)
+            .ThenByDescending(message => message.Id)
+            .Take(100)
+            .Select(message => message.Message)
+            .ToListAsync(cancellationToken);
+        var latestSentiment = await _ticketSentimentQuery.GetLatestSuccessfulAsync(id, cancellationToken);
+
+        var request = new AiNextBestActionRequestDto
+        {
+            TicketId = ticket.Id,
+            Subject = ticket.Subject,
+            Description = ticket.Description,
+            Status = ticket.Status,
+            Priority = ticket.Priority,
+            Messages = customerMessages
+                .AsEnumerable()
+                .Reverse()
+                .Select(message => new AiCustomerMessageDto { SenderRole = "customer", Message = message })
+                .ToList(),
+            LatestSentiment = latestSentiment is null ? null : new AiLatestSentimentDto
+            {
+                Label = latestSentiment.SentimentLabel.ToLowerInvariant(),
+                Confidence = latestSentiment.Confidence
+            }
+        };
+
+        try
+        {
+            var result = await _aiTicketService.GenerateNextBestActionAsync(request, cancellationToken);
+            return Ok(result);
+        }
+        catch (AiTicketServiceException exception)
+        {
+            return StatusCode(exception.StatusCode, new { message = exception.Message });
+        }
+    }
 
     private async Task<IActionResult> GenerateAiResultAsync(
         int ticketId,

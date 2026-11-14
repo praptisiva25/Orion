@@ -1,0 +1,261 @@
+version: "1.0.0"
+rules:
+  - rule_id: failed_atm_withdrawal
+    scenario: failed_atm_withdrawal
+    description: Illustrative guidance for a customer report that an ATM withdrawal did not dispense cash or has an unclear outcome.
+    trigger_conditions:
+      any:
+        - field: customer_report
+          operator: contains_any
+          value: ["cash not received", "cash not dispensed", "ATM withdrawal failed"]
+    required_information:
+      - approximate transaction date and time
+      - amount reported by the customer
+      - ATM location or identifier, if available
+      - whether the customer reports an account debit
+    recommended_actions:
+      - action_code: request_information
+        description: Ask for the missing transaction details without requesting credentials or full account or card numbers.
+        officer_review_required: true
+      - action_code: review_available_details
+        description: Review the report using the bank's authorized internal process and available transaction records.
+        officer_review_required: true
+    escalation_conditions:
+      - The customer reports that the transaction was unauthorized.
+      - The available information does not resolve the reported outcome.
+    restrictions: &mandatory_restrictions
+      - advisory_only
+      - no_transaction_execution
+      - no_unauthorized_transaction_execution
+      - no_refund_or_credit
+      - no_account_freeze_or_block
+      - no_automatic_customer_communication
+      - no_claim_of_verification_or_completion
+      - no_unsupported_timelines_or_guarantees
+    priority: 70
+    source_references:
+      - source_id: orion_demo_atm_guidance
+        source_type: illustrative_internal
+        title: ORION demonstration guidance — failed ATM withdrawal
+    version: "1.0.0"
+
+  - rule_id: failed_upi_transaction
+    scenario: failed_upi_transaction
+    description: Illustrative guidance for a customer report that a UPI transaction failed or has an unclear outcome.
+    trigger_conditions:
+      any:
+        - field: customer_report
+          operator: contains_any
+          value: ["UPI failed", "UPI transaction pending", "UPI payment not received"]
+    required_information:
+      - approximate transaction date and time
+      - amount reported by the customer
+      - transaction reference, if available and safe to share through approved channels
+      - whether the customer reports a debit or beneficiary non-receipt
+    recommended_actions:
+      - action_code: request_information
+        description: Ask which part of the transaction appears unresolved and request only an approved reference, not authentication secrets.
+        officer_review_required: true
+      - action_code: review_available_details
+        description: Review the report through the bank's authorized transaction-support process.
+        officer_review_required: true
+    escalation_conditions:
+      - The customer reports that the transaction was unauthorized.
+      - The transaction status remains unclear after authorized review.
+    restrictions: *mandatory_restrictions
+    priority: 70
+    source_references:
+      - source_id: orion_demo_upi_guidance
+        source_type: illustrative_internal
+        title: ORION demonstration guidance — failed UPI transaction
+    version: "1.0.0"
+
+  - rule_id: unauthorized_transaction_report
+    scenario: unauthorized_transaction
+    description: Illustrative guidance for a customer report of a transaction they do not recognize or authorize.
+    trigger_conditions:
+      all:
+        - field: unauthorized_activity_reported
+          operator: is_true
+    required_information:
+      - transaction date and approximate time, if known
+      - amount and channel as reported by the customer
+      - whether access to a card, device, or account is also reported as compromised
+    recommended_actions:
+      - action_code: record_customer_report
+        description: Record the customer's report accurately without presenting it as a verified finding.
+        officer_review_required: true
+      - action_code: escalate_for_review
+        description: Refer the report promptly to the bank's authorized fraud or security review process.
+        officer_review_required: true
+    escalation_conditions:
+      - This scenario is itself an escalation condition for authorized fraud or security review.
+      - The customer reports ongoing account access or additional unfamiliar activity.
+    restrictions: *mandatory_restrictions
+    priority: 100
+    source_references:
+      - source_id: orion_demo_unauthorized_transaction_guidance
+        source_type: illustrative_internal
+        title: ORION demonstration guidance — unauthorized transaction report
+    version: "1.0.0"
+
+  - rule_id: account_access_or_blocking
+    scenario: account_access_or_blocking
+    description: Illustrative guidance for a customer report of account access difficulty or a request about account blocking.
+    trigger_conditions:
+      any:
+        - field: account_access_issue_reported
+          operator: is_true
+        - field: customer_report
+          operator: contains_any
+          value: ["cannot access account", "cannot access my account", "can't access account", "can't access my account", "account blocked", "account locked"]
+    required_information:
+      - the access problem or customer request, in the customer's own terms
+      - when the issue began, if known
+      - whether the customer reports unfamiliar activity
+    recommended_actions:
+      - action_code: request_information
+        description: Clarify the access issue without requesting a password, PIN, OTP, CVV, or full account number.
+        officer_review_required: true
+      - action_code: refer_to_authorized_process
+        description: Refer account-access or blocking requests to the applicable authorized bank process for review.
+        officer_review_required: true
+    escalation_conditions:
+      - The customer reports unfamiliar activity or suspected account compromise.
+      - The request requires account restriction or access-control changes.
+    restrictions: *mandatory_restrictions
+    priority: 85
+    source_references:
+      - source_id: orion_demo_account_access_guidance
+        source_type: illustrative_internal
+        title: ORION demonstration guidance — account access or blocking
+    version: "1.0.0"
+
+  - rule_id: kyc_document_verification
+    scenario: kyc_document_verification
+    description: Illustrative guidance for a customer report about KYC submission or document verification.
+    trigger_conditions:
+      any:
+        - field: kyc_issue_reported
+          operator: is_true
+        - field: customer_report
+          operator: contains_any
+          value: ["KYC document", "identity verification", "document verification"]
+    required_information:
+      - document type as reported by the customer
+      - whether the customer reports submitting the document
+      - any non-sensitive status or reference available through an approved channel
+    recommended_actions:
+      - action_code: review_available_details
+        description: Review only the status and document information available through authorized bank systems.
+        officer_review_required: true
+      - action_code: request_information
+        description: Ask for missing non-sensitive details through an approved channel; do not request unnecessary identity data in free text.
+        officer_review_required: true
+    escalation_conditions:
+      - The reported status conflicts with information visible to an authorized reviewer.
+      - The request involves a suspected identity or document misuse concern.
+    restrictions: *mandatory_restrictions
+    priority: 60
+    source_references:
+      - source_id: orion_demo_kyc_guidance
+        source_type: illustrative_internal
+        title: ORION demonstration guidance — KYC document verification
+    version: "1.0.0"
+
+  - rule_id: card_related_complaint
+    scenario: card_related_complaint
+    description: Illustrative guidance for a customer report of a card payment, card access, or card-service problem.
+    trigger_conditions:
+      any:
+        - field: card_issue_reported
+          operator: is_true
+        - field: customer_report
+          operator: contains_any
+          value: ["card payment", "card declined", "card not received"]
+    required_information:
+      - card-service issue as reported by the customer
+      - approximate date and time of a related transaction, if any
+      - whether the customer reports unfamiliar activity
+    recommended_actions:
+      - action_code: request_information
+        description: Clarify the reported card issue without requesting a full card number, CVV, PIN, or OTP.
+        officer_review_required: true
+      - action_code: refer_to_authorized_process
+        description: Refer card access or control requests to the bank's authorized card-service process.
+        officer_review_required: true
+    escalation_conditions:
+      - The customer reports an unfamiliar card transaction or suspected card compromise.
+      - The request requires card restriction or account-control changes.
+    restrictions: *mandatory_restrictions
+    priority: 75
+    source_references:
+      - source_id: orion_demo_card_guidance
+        source_type: illustrative_internal
+        title: ORION demonstration guidance — card-related complaint
+    version: "1.0.0"
+
+  - rule_id: transaction_dispute
+    scenario: transaction_dispute
+    description: Illustrative guidance for a customer who disputes a transaction or requests a transaction review.
+    trigger_conditions:
+      any:
+        - field: dispute_reported
+          operator: is_true
+        - field: customer_report
+          operator: contains_any
+          value: ["dispute transaction", "do not recognize transaction", "transaction issue"]
+    required_information:
+      - transaction date and approximate time, if known
+      - amount and channel as reported by the customer
+      - the reason the customer disputes the transaction
+      - an approved reference, if available
+    recommended_actions:
+      - action_code: record_customer_report
+        description: Record the dispute reason as the customer's report, not as an established transaction finding.
+        officer_review_required: true
+      - action_code: refer_to_authorized_process
+        description: Refer the dispute for review through the bank's authorized process.
+        officer_review_required: true
+    escalation_conditions:
+      - The customer reports unauthorized activity or suspected account compromise.
+      - The matter requires specialist review under an approved procedure.
+    restrictions: *mandatory_restrictions
+    priority: 80
+    source_references:
+      - source_id: orion_demo_dispute_guidance
+        source_type: illustrative_internal
+        title: ORION demonstration guidance — transaction dispute
+    version: "1.0.0"
+
+  - rule_id: complaint_escalation
+    scenario: complaint_escalation
+    description: Illustrative guidance for a customer asking for a complaint to be escalated or reviewed further.
+    trigger_conditions:
+      any:
+        - field: escalation_requested
+          operator: is_true
+        - field: customer_report
+          operator: contains_any
+          value: ["escalate complaint", "speak to a supervisor", "complaint review"]
+    required_information:
+      - existing complaint or ticket reference, if available
+      - the unresolved concern, in the customer's own terms
+      - any review already communicated by an Officer, clearly distinguished from verified facts
+    recommended_actions:
+      - action_code: record_customer_report
+        description: Summarize the unresolved concern accurately and retain the customer's stated context.
+        officer_review_required: true
+      - action_code: escalate_for_review
+        description: Refer the request to the applicable authorized complaint-review process.
+        officer_review_required: true
+    escalation_conditions:
+      - The customer explicitly requests further review.
+      - A concern involves suspected fraud, account compromise, or another specialist-review need.
+    restrictions: *mandatory_restrictions
+    priority: 90
+    source_references:
+      - source_id: orion_demo_complaint_escalation_guidance
+        source_type: illustrative_internal
+        title: ORION demonstration guidance — complaint escalation
+    version: "1.0.0"

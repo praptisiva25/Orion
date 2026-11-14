@@ -20,6 +20,7 @@ import type {
   AdminSentimentDistribution,
   AdminSentimentTrends,
   AdminTicketSentimentInsightsPage,
+  NextBestActionResponse,
 } from "@/types/banking";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -273,6 +274,9 @@ export const bankingApi = {
 
     generateOfficerSuggestedResponse: (id: number) =>
         apiRequest<{ result: string }>(`/api/officer/tickets/${id}/suggested-response`, { method: "POST" }),
+
+  generateOfficerTicketNextBestAction: (id: number) =>
+    apiRequest<NextBestActionResponse>(`/api/officer/tickets/${id}/next-best-action`, { method: "POST" }),
     
     updateOfficerTicketStatus: (
         id: number,
